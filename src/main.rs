@@ -1,9 +1,11 @@
 use serde_derive::Deserialize;
-use std::fs::File;
-use std::io::BufReader;
-use std::io::prelude::*;
 use std::env;
+use std::fs::File;
+use std::io::prelude::*;
+use std::io::BufReader;
+use std::io::{self, Write};
 use std::process::Command;
+use std::str::SplitWhitespace;
 
 #[derive(Debug, Deserialize)]
 struct Config {
@@ -14,6 +16,7 @@ struct Config {
 struct Alias {
     alias: String,
     command: String,
+    arguments: Vec<String>
 }
 
 fn main() {
@@ -23,41 +26,61 @@ fn main() {
     let mut buf_reader = BufReader::new(file);
     let mut contents = String::new();
     buf_reader.read_to_string(&mut contents).unwrap();
-    
-    println!("{:#?}", env::args());
+
     let config: Config = toml::from_str(&contents).unwrap();
+    println!("{:#?}", config);
     let args = env::args().skip(1);
     let input = args.collect::<Vec<String>>().join(" ");
 
     let matched_alias = find_matching_alias(&input, &config);
-    match matched_alias{
+    match matched_alias {
         None => {
             println!("Not found");
         }
         Some(alias) => {
             let command = &alias.command;
-            println!("Running {:#?}", command);
-            Command::new(command)
-            .spawn()
-            .expect("failed to execute process");
+            let alias_arguments = &alias.arguments;
+            let prefix_length = alias.alias.chars().count();
+            let user_arguments = arguments(&input, prefix_length);
+            println!("user args {:#?}", user_arguments);
+            println!("{:#?}", command);
+
+            let output = Command::new(command)
+                .args(alias_arguments)
+                .args(user_arguments)
+                .output()
+                .expect("failed to execute process");
+
+            io::stdout().write_all(&output.stdout).unwrap();
+            io::stderr().write_all(&output.stderr).unwrap();
         }
     }
-    // println!("Matching alias result {:#?}", );
 }
 
-fn find_matching_alias<'a>(command: &String, config: &'a Config) -> Option<&'a Alias> {
+fn find_matching_alias<'a>(command: &str, config: &'a Config) -> Option<&'a Alias> {
     match &config.aliases {
         None => {
-            return None;
+            None
         }
         Some(aliases) => {
-            for item in aliases {
+            for item in aliases {                
                 if command.starts_with(&item.alias) {
                     return Some(item);
                 }
             }
 
-            return None;
-        },
+            None
+        }
+    }
+}
+
+fn arguments(input: &str, alias_lenght: usize) -> SplitWhitespace {
+    slice_arguments(input, alias_lenght).split_whitespace()
+}
+
+fn slice_arguments(input: &str, alias_lenght: usize) -> &str {
+    match input.char_indices().nth(alias_lenght) {
+        Some((pos, _)) => &input[pos..],
+        None => "",
     }
 }
