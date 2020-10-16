@@ -1,0 +1,25 @@
+#[[aliases]]
+#alias = "composer install"
+#command = "docker run --rm --interactive --tty --volume $PWD:/app --volume ${COMPOSER_HOME:-$HOME/.composer}:/tmp composer install"
+#arguments = []
+#
+#[[aliases]]
+#alias = "d"
+#command = "docker"
+#arguments = ["-D"]
+#
+#[[aliases]]
+#alias = "php"
+#command = "docker"
+#arguments = ["run", "-it", "--rm", "--name", "my-running-script", "-v", "\"${PWD}\":/usr/src/myapp", "-w", "/usr/src/myapp", "php:7.4-cli", "php"]
+#
+#[[aliases]]
+#alias = "composer"
+#command = "docker run --rm  --volume $PWD:/app --volume ${COMPOSER_HOME:-$HOME/.composer}:/tmp composer ${COMMAND} ${ARGS}"
+
+[aliases]
+  [aliases.composer]
+  run = "docker run --rm --interactive --tty --volume $PWD:/app --volume ${COMPOSER_HOME:-$HOME/.composer}:/tmp composer ${COMMAND} ${ARGS}"
+
+  [aliases.php]
+  run = "docker run --rm -v ${PWD}:/usr/src/myapp -w /usr/src/myapp php:7.4-cli php ${COMMAND} ${ARGS}"
