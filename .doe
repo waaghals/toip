@@ -23,3 +23,30 @@
 
   [aliases.php]
   run = "docker run --rm -v ${PWD}:/usr/src/myapp -w /usr/src/myapp php:7.4-cli php ${COMMAND} ${ARGS}"
+
+# [composer install]
+# > docker run --rm --interactive --tty --volume $PWD:/app --volume ${COMPOSER_HOME:-$HOME/.composer}:/tmp composer ${COMMAND} ${ARGS}
+#
+#
+# [php]
+# > docker run --rm -v ${PWD}:/usr/src/myapp -w /usr/src/myapp php:7.4-cli php ${COMMAND} ${ARGS}
+#
+#
+# | // pipe
+# || // run rhs when lhs has non-zero exit code
+# && // run rhs when lhs has zero exit code
+# ${VAR} // envvar
+# $VAR // env var
+# ${VAR:-default} // environment variable with default
+# ; // multiple commands
+# exit // stop
+# # // command
+# ~ // homedir
+# ${VAR:+ifset} // return ifset when VAR is true
+# $1 // first argument
+# $* // all arguments
+# $[1..] // argument slices?
+# > // begin script
+# `` // command substitusion
+# $() // command substitusion
+# ^ // Current location of config
