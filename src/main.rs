@@ -5,6 +5,7 @@ use crate::config::{Alias, ConfigLocation};
 
 mod config;
 mod parser;
+mod testcase;
 
 fn main() {
     // TODO proper error handling

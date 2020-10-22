@@ -26,9 +26,15 @@
 
 # [composer install]
 # > docker run --rm --interactive --tty --volume $PWD:/app --volume ${COMPOSER_HOME:-$HOME/.composer}:/tmp composer ${COMMAND} ${ARGS}
+# ^2
+# !tty true
+# !interactive true
+# !inherit false
+# #arch x86_64
+# #arch x86
+# #os windows
 #
-#
-# [php]
+# php
 # > docker run --rm -v ${PWD}:/usr/src/myapp -w /usr/src/myapp php:7.4-cli php ${COMMAND} ${ARGS}
 #
 #
@@ -46,7 +52,6 @@
 # $1 // first argument
 # $* // all arguments
 # $[1..] // argument slices?
-# > // begin script
 # `` // command substitusion
 # $() // command substitusion
 # ^ // Current location of config
