@@ -1,58 +1,27 @@
 use std::env;
 use std::env::current_dir;
 
-use crate::config::{Alias, ConfigLocation};
+use crate::config::{Config, Errors};
 
 mod config;
-mod parser;
-mod testcase;
 
-fn main() {
-    // TODO proper error handling
+fn main() -> Result<(), Errors>{
     let dir = current_dir().unwrap();
-    let configs: Vec<ConfigLocation> = config::files(&dir).collect();
+    let config: Config = config::from_dir(&dir).unwrap();
+    config.validate()?;
 
-    let input = env::args().skip(1).collect::<Vec<String>>().join(" ");
+    let command = env::args().skip(1).next().unwrap();
 
-    let matched_alias = find_matching_alias(&input, &configs);
-
-    match matched_alias {
+    match config.get_container_by_alias(&command) {
+        Some(container) => {
+            println!("{:#?}", container)
+        },
         None => {
-            println!("Not found");
-        }
-        Some((alias, config)) => {
-            let run = &config.run();
-            println!("Run: {:#?}", run);
-            println!("Input: {:#?}", input);
-            println!("Alias: {:#?}", alias);
-            let args: String = input.chars().skip(alias.len()).collect();
-            println!("Arguments: {:#?}", args.trim());
-//
-//            let mut child = Command::new(command)
-//                .spawn()
-//                .unwrap();
-//
-//            // don't accept another command until this one completes
-//            child.wait();
+            println!("No such container. \nOnly available containers:\n{:#?}", config.available_aliases());
         }
     }
-}
 
-fn find_matching_alias<'a>(command: &str, configs: &'a Vec<ConfigLocation>) -> Option<(&'a String, &'a Alias)> {
-    for config_location in configs {
-        let config = config_location.config();
-        match config.aliases() {
-            None => continue,
-            Some(aliases) => {
-                for (alias, alias_config) in aliases {
-                    if command.starts_with(alias) {
-                        return Some((alias, alias_config));
-                    }
-                }
-            }
-        }
-    }
-    None
+    return Ok(());
 }
 
 // https://www.joshmcguigan.com/blog/build-your-own-shell-rust/

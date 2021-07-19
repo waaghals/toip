@@ -18,11 +18,18 @@
 #command = "docker run --rm  --volume $PWD:/app --volume ${COMPOSER_HOME:-$HOME/.composer}:/tmp composer ${COMMAND} ${ARGS}"
 
 [aliases]
-  [aliases.composer]
-  run = "docker run --rm --interactive --tty --volume $PWD:/app --volume ${COMPOSER_HOME:-$HOME/.composer}:/tmp composer ${COMMAND} ${ARGS}"
+composer="composer"
+same="composer"
+sh="sh"
 
-  [aliases.php]
-  run = "docker run --rm -v ${PWD}:/usr/src/myapp -w /usr/src/myapp php:7.4-cli php ${COMMAND} ${ARGS}"
+[containers.sh]
+image = "sh:latest"
+
+[containers.composer]
+image = "composer:latest"
+links = { sh = "sh"}
+volumes = { "/usr/local/bin" = "composer"}
+envvars = { composer = "composer"}
 
 # [composer install]
 # > docker run --rm --interactive --tty --volume $PWD:/app --volume ${COMPOSER_HOME:-$HOME/.composer}:/tmp composer ${COMMAND} ${ARGS}

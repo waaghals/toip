@@ -2,50 +2,82 @@ use serde_derive::Deserialize;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, Read};
-use std::path::{PathBuf};
-
-pub fn files(top_path: &PathBuf) -> impl Iterator<Item=ConfigLocation> + '_ {
-    top_path.ancestors()
-        .map(|path| path.join(".doe"))
-        .filter(|path| path.exists())
-        .map(|path| ConfigLocation { path: path.parent().unwrap().to_path_buf(), config: parse_config(&path) })
-}
-
-#[derive(Debug)]
-pub struct ConfigLocation {
-    path: PathBuf,
-    config: Config,
-}
-
-impl ConfigLocation {
-    pub fn path(&self) -> &PathBuf {
-        &self.path
-    }
-
-    pub fn config(&self) -> &Config {
-        &self.config
-    }
-}
+use std::path::PathBuf;
+use std::fmt;
+use std::collections::hash_map::Keys;
 
 #[derive(Debug, Deserialize)]
-pub struct Alias {
-    run: String,
+pub struct Container {
+    image: String,
+    links: Option<HashMap<String, String>>,
+    volumes: Option<HashMap<String, String>>,
+    envvars: Option<HashMap<String, String>>,
 }
 
-impl Alias {
-    pub fn run(&self) -> &String {
-        &self.run
+impl Container {
+    pub fn image(&self) -> &String {
+        &self.image
+    }
+}
+
+struct MissingContainerForLink {
+    container: String,
+    link: String,
+}
+
+struct MissingContainerForAlias {
+    container: String,
+    alias: String,
+}
+
+pub struct Errors {
+    missing_containers_for_alias: Vec<MissingContainerForAlias>,
+    missing_containers_for_link: Vec<MissingContainerForLink>,
+}
+
+impl fmt::Debug for Errors {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for missing_container in &self.missing_containers_for_alias {
+            writeln!(f, "Alias \"{}\": no container named \"{}\".", missing_container.alias, missing_container.container)?;
+        }
+        for missing_container in &self.missing_containers_for_link {
+            writeln!(f, "Link \"{}\": no container named \"{}\".", missing_container.link, missing_container.container)?;
+        }
+        return Ok(());
     }
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    aliases: Option<HashMap<String, Alias>>
+    containers: HashMap<String, Container>,
+    aliases: HashMap<String, String>,
 }
 
 impl Config {
-    pub fn aliases(&self) -> &Option<HashMap<String, Alias>> {
-        &self.aliases
+    pub fn get_container_by_alias(&self, name: &String) -> Option<&Container> {
+        let alias = self.aliases.get(name);
+        match alias {
+            Some(container) => self.containers.get(container),
+            None => None,
+        }
+    }
+
+    pub fn available_aliases(&self) -> Keys<'_, String, String>{
+        return self.aliases.keys();
+    }
+
+    pub fn validate<'a>(&self) -> Result<(), Errors> {
+        return Ok(());
+        // return Err(Errors {
+        //     missing_containers_for_alias: vec![MissingContainerForAlias {
+        //         container: String::from("container-value"),
+        //         alias: String::from("alias-value")
+        //     }],
+        //     missing_containers_for_link: vec![MissingContainerForLink {
+        //         container: String::from("container-value"),
+        //         link: String::from("link-value")
+        //     }]
+        // });
     }
 }
 
@@ -56,4 +88,8 @@ fn parse_config(file: &PathBuf) -> Config {
     buf_reader.read_to_string(&mut contents).unwrap();
 
     toml::from_str(&contents).unwrap()
+}
+
+pub fn from_dir(dir: &PathBuf) -> Option<Config> {
+    Some(parse_config(&dir.join(".doe.toml")))
 }
