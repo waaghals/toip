@@ -1,0 +1,29 @@
+{
+    "aliases": {
+      "composer": "composer_container",
+      "bash": "cowsay_container"
+    },
+    "containers": {
+      "composer_container": {
+        "image": "composer:latest",
+        "cmd": "composer",
+        "volumes": {
+          "$PWD": "/some/path"
+        }
+      },
+      "bash_container": {
+        "image": "bash:latest",
+        "cmd": "bash",
+        "links": {
+          "cowsay": "cowsay_container"
+        }
+      },
+      "cowsay_container": {
+        "image": "cowsay:latest",
+        "cmd": "cowsay",
+        "env": {
+          "COWSAY_ANIMAL": "tux"
+        }
+      }
+    }
+  }

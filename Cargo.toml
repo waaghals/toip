@@ -12,5 +12,20 @@ toml = "0.5.6"
 serde = "1.0.111"
 serde_derive = "1.0.111"
 bollard = "0.11"
+tokio = { version = "1.8.1", features = ["rt", "macros"] }
+termion = "1.5.6"
+futures-util = "0.3.15"
+structopt = "0.3"
+anyhow = "1.0"
+nix = "0.22.0"
+log = "0.4.14"
+clap-verbosity-flag = "0.3.1"
+simplelog = "0.10.0"
+serde_json = "1.0.66"
 # shellexpand = "2.0.0"
 # walkdir = "2.3.1"
+
+[profile.release]
+opt-level = 'z'
+lto = true
+codegen-units = 1
