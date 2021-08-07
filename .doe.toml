@@ -1,64 +1,24 @@
-#[[aliases]]
-#alias = "composer install"
-#command = "docker run --rm --interactive --tty --volume $PWD:/app --volume ${COMPOSER_HOME:-$HOME/.composer}:/tmp composer install"
-#arguments = []
-#
-#[[aliases]]
-#alias = "d"
-#command = "docker"
-#arguments = ["-D"]
-#
-#[[aliases]]
-#alias = "php"
-#command = "docker"
-#arguments = ["run", "-it", "--rm", "--name", "my-running-script", "-v", "\"${PWD}\":/usr/src/myapp", "-w", "/usr/src/myapp", "php:7.4-cli", "php"]
-#
-#[[aliases]]
-#alias = "composer"
-#command = "docker run --rm  --volume $PWD:/app --volume ${COMPOSER_HOME:-$HOME/.composer}:/tmp composer ${COMMAND} ${ARGS}"
-
 [aliases]
-composer="composer"
-same="composer"
-sh="sh"
+bash = "bash"
+cowsay = "cowway_container"
 
-[containers.sh]
-image = "sh:latest"
+[containers.bash]
+args = []
+cmd = "bash"
+image = "bash:latest"
+[containers.bash.links]
+cowsay = "cowway_container"
 
 [containers.composer]
+cmd = "composer"
 image = "composer:latest"
-links = { sh = "sh"}
-volumes = { "/usr/local/bin" = "composer"}
-envvars = { composer = "composer"}
+[containers.composer.links]
+bash = "bash"
+[containers.composer.volumes]
+"/dir/in/container" = "${PWD}/other/folder"
 
-# [composer install]
-# > docker run --rm --interactive --tty --volume $PWD:/app --volume ${COMPOSER_HOME:-$HOME/.composer}:/tmp composer ${COMMAND} ${ARGS}
-# ^2
-# !tty true
-# !interactive true
-# !inherit false
-# #arch x86_64
-# #arch x86
-# #os windows
-#
-# php
-# > docker run --rm -v ${PWD}:/usr/src/myapp -w /usr/src/myapp php:7.4-cli php ${COMMAND} ${ARGS}
-#
-#
-# | // pipe
-# || // run rhs when lhs has non-zero exit code
-# && // run rhs when lhs has zero exit code
-# ${VAR} // envvar
-# $VAR // env var
-# ${VAR:-default} // environment variable with default
-# ; // multiple commands
-# exit // stop
-# # // command
-# ~ // homedir
-# ${VAR:+ifset} // return ifset when VAR is true
-# $1 // first argument
-# $* // all arguments
-# $[1..] // argument slices?
-# `` // command substitusion
-# $() // command substitusion
-# ^ // Current location of config
+[containers.cowway_container]
+cmd = "cowsay"
+image = "jtcressy/cowsay:latest"
+[containers.cowway_container.envvars]
+COWSAY_ANIMAL = "tux"

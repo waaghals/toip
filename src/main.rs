@@ -1,27 +1,130 @@
-use std::env;
+use anyhow::{Context, Result};
 use std::env::current_dir;
+use std::io::{BufRead, BufReader, Write};
+use std::path::PathBuf;
+use std::{fs, fs::File, fs::OpenOptions};
+use structopt::StructOpt;
 
-use crate::config::{Config, Errors};
-
+use config::RuntimeConfig;
 mod config;
+mod container;
+mod init;
+mod logger;
 
-fn main() -> Result<(), Errors>{
-    let dir = current_dir().unwrap();
-    let config: Config = config::from_dir(&dir).unwrap();
-    config.validate()?;
+#[derive(StructOpt, Debug)]
+#[structopt(about = "Tools to allow separate containers to call each other")]
+struct Cli {
+    #[structopt(flatten)]
+    verbosity: clap_verbosity_flag::Verbosity,
+    #[structopt(subcommand)]
+    command: Command,
+}
 
-    let command = env::args().skip(1).next().unwrap();
+#[derive(StructOpt, Debug)]
+enum Command {
+    #[structopt(help = "Add the current configured aliases into the shell")]
+    Inject {},
 
-    match config.get_container_by_alias(&command) {
-        Some(container) => {
-            println!("{:#?}", container)
-        },
-        None => {
-            println!("No such container. \nOnly available containers:\n{:#?}", config.available_aliases());
+    #[structopt(help = "Acts as a containers init process")]
+    Init {
+        #[structopt(help = "Command to start")]
+        cmd: String,
+
+        #[structopt(help = "Arguments to pass to starting process")]
+        args: Vec<String>,
+    },
+
+    #[structopt(help = "Run a container for a given alias")]
+    Run {
+        #[structopt(help = "Alias to run")]
+        alias: String,
+        #[structopt(help = "Arguments to call the container with")]
+        args: Vec<String>,
+    },
+
+    #[structopt(help = "Run a linked container from a runtime config")]
+    Exec {
+        #[structopt(
+            parse(from_os_str),
+            help = "Script with run configuration to interpret"
+        )]
+        file: PathBuf,
+        #[structopt(help = "Arguments to call the container with")]
+        args: Vec<String>,
+    },
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let cli = Cli::from_args();
+    logger::init(cli.verbosity.log_level());
+    match cli.command {
+        Command::Init { cmd, args } => {
+            log::debug!("Command: init. cmd: {} args: {:#?}", cmd, args);
+            init::spawn(cmd, args)?
+        }
+        Command::Run { alias, args } => {
+            log::debug!("Command: run. alias: {} args: {:#?}", alias, args);
+
+            let dir = current_dir().unwrap();
+            // config.validate()?;
+            let config = config::from_dir(&dir).unwrap();
+
+            let runtime = container::Runtime::new();
+            let manager = container::Manager {
+                workdir: dir,
+                config: config,
+                runtime: runtime,
+            };
+
+            let args = args.iter().map(|a| a.as_str()).collect();
+            manager.run(&alias, args).await?
+        }
+        Command::Exec { file , args} => {
+            log::debug!("Command: exec. file: {:#?}", file);
+            let file = OpenOptions::new().read(true).write(true).open(file)?;
+
+            let lines = BufReader::new(file)
+                .lines()
+                .skip(1)
+                .map(|x| x.unwrap())
+                .collect::<Vec<String>>()
+                .join("\n");
+
+            let config: RuntimeConfig = serde_json::from_str(&lines).with_context(|| format!("Could not parse exec information"))?;
+
+            let container = config.config.get_container_by_name(&config.container_name).unwrap();
+
+            let runtime = container::Runtime::new();
+            runtime.run_container(&container.image, &container.cmd, &Some(args), &None, &None).await?
+        }
+        Command::Inject {} => {
+            log::debug!("Command: inject.");
         }
     }
 
-    return Ok(());
+    Ok(())
+
+    //TODO https://github.com/riboseinc/riffol
+    //TODO https://crates.io/crates/atty
+    //TODO https://github.com/cyphar/initrs/blob/master/src/main.rs
+
+    // match config.get_container_by_alias(&command) {
+    //     Some(container) => {
+    //         println!("{:#?}", container)
+    //     },
+    //     None => {
+    //         println!("No such container. \nOnly available containers:\n{:#?}", config.available_aliases());
+    //         return Ok(());
+    //     }
+    // }
+
+    // match run_container().await {
+    //     Ok(_) => println!("done"),
+    //     Err(err) => println!("{:#?}", err),
+    // };
+
+    // return Ok(());
 }
 
 // https://www.joshmcguigan.com/blog/build-your-own-shell-rust/
