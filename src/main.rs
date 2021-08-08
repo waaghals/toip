@@ -1,15 +1,22 @@
 use anyhow::{Context, Result};
 use std::env::current_dir;
+use std::fs::OpenOptions;
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
-use std::{fs, fs::File, fs::OpenOptions};
 use structopt::StructOpt;
 
 use config::RuntimeConfig;
+
+use crate::registry::docker::Registry;
+
 mod config;
 mod container;
 mod init;
 mod logger;
+mod metadata;
+mod oci;
+mod registry;
+mod verify;
 
 #[derive(StructOpt, Debug)]
 #[structopt(about = "Tools to allow separate containers to call each other")]
@@ -80,7 +87,7 @@ async fn main() -> Result<()> {
             let args = args.iter().map(|a| a.as_str()).collect();
             manager.run(&alias, args).await?
         }
-        Command::Exec { file , args} => {
+        Command::Exec { file, args } => {
             log::debug!("Command: exec. file: {:#?}", file);
             let file = OpenOptions::new().read(true).write(true).open(file)?;
 
@@ -91,15 +98,24 @@ async fn main() -> Result<()> {
                 .collect::<Vec<String>>()
                 .join("\n");
 
-            let config: RuntimeConfig = serde_json::from_str(&lines).with_context(|| format!("Could not parse exec information"))?;
+            let config: RuntimeConfig = serde_json::from_str(&lines)
+                .with_context(|| format!("Could not parse exec information"))?;
 
-            let container = config.config.get_container_by_name(&config.container_name).unwrap();
+            let container = config
+                .config
+                .get_container_by_name(&config.container_name)
+                .unwrap();
 
             let runtime = container::Runtime::new();
-            runtime.run_container(&container.image, &container.cmd, &Some(args), &None, &None).await?
+            runtime
+                .run_container(&container.image, &container.cmd, &Some(args), &None, &None)
+                .await?
         }
         Command::Inject {} => {
             log::debug!("Command: inject.");
+            let client = Registry::default();
+            let image = client.download("quay.io/libpod/alpine:latest").await?;
+            println!("{:#?}", image);
         }
     }
 
@@ -108,6 +124,12 @@ async fn main() -> Result<()> {
     //TODO https://github.com/riboseinc/riffol
     //TODO https://crates.io/crates/atty
     //TODO https://github.com/cyphar/initrs/blob/master/src/main.rs
+
+    //TODO extract/unpack to oci runtime bundle:
+    // https://fly.io/blog/docker-without-docker/
+    // https://github.com/daikimiura/rocker/blob/master/src/image.rs
+    // https://github.com/opencontainers/umoci/blob/758044fc26ad65eb900143e90d1e22c2d6e4484d/oci/layer/unpack.go#L161
+    // https://github.com/opencontainers/umoci/blob/758044fc26ad65eb900143e90d1e22c2d6e4484d/oci/layer/unpack.go#L55
 
     // match config.get_container_by_alias(&command) {
     //     Some(container) => {

@@ -4,6 +4,7 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+
         {
             "type": "lldb",
             "request": "launch",
@@ -20,6 +21,25 @@
                 }
             },
             "args": ["run", "bash"],
+            "cwd": "${workspaceFolder}"
+        },
+
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug 'doe inject'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=doe",
+                    "--package=doe"
+                ],
+                "filter": {
+                    "name": "doe",
+                    "kind": "bin"
+                }
+            },
+            "args": ["inject"],
             "cwd": "${workspaceFolder}"
         },
         {
