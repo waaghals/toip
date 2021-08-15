@@ -1,13 +1,13 @@
 use anyhow::{Context, Result};
 use std::env::current_dir;
 use std::fs::OpenOptions;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use structopt::StructOpt;
 
 use config::RuntimeConfig;
-
-use crate::registry::docker::Registry;
+use oci::distribution::build_registry;
+use oci::distribution::Registry;
 
 mod config;
 mod container;
@@ -15,8 +15,7 @@ mod init;
 mod logger;
 mod metadata;
 mod oci;
-mod registry;
-mod verify;
+
 
 #[derive(StructOpt, Debug)]
 #[structopt(about = "Tools to allow separate containers to call each other")]
@@ -80,8 +79,8 @@ async fn main() -> Result<()> {
             let runtime = container::Runtime::new();
             let manager = container::Manager {
                 workdir: dir,
-                config: config,
-                runtime: runtime,
+                config,
+                runtime,
             };
 
             let args = args.iter().map(|a| a.as_str()).collect();
@@ -99,7 +98,7 @@ async fn main() -> Result<()> {
                 .join("\n");
 
             let config: RuntimeConfig = serde_json::from_str(&lines)
-                .with_context(|| format!("Could not parse exec information"))?;
+                .context("Could not parse exec information")?;
 
             let container = config
                 .config
@@ -113,9 +112,18 @@ async fn main() -> Result<()> {
         }
         Command::Inject {} => {
             log::debug!("Command: inject.");
-            let client = Registry::default();
-            let image = client.download("quay.io/libpod/alpine:latest").await?;
+            
+            let name = "libpod/alpine";
+            let registry = build_registry("quay.io");
+            let manifest = registry.manifest(name, "latest").await?;
+            let image = registry.image(name, &manifest.config).await?;
+            
+            // let image = client.download("quay.io","libpod/alpine", "latest").await?;
             println!("{:#?}", image);
+            for layer in manifest.layers {
+                let _blob = registry.layer(name, &layer).await?;
+                println!("LAYER: `{}`", layer.digest);            
+            }
         }
     }
 

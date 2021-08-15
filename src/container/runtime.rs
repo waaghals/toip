@@ -51,7 +51,7 @@ impl Runtime {
         mounts: &Option<HashMap<String, String>>,
         envvars: &Option<HashMap<String, String>>,
     ) -> Result<()> {
-        self.create_image(&image).await?;
+        self.create_image(image).await?;
         #[cfg(not(windows))]
         let tty_size = terminal_size()?;
 
@@ -94,8 +94,7 @@ impl Runtime {
             None => Vec::<String>::new(),
         };
 
-        let mut full_cmd = Vec::<String>::new();
-        full_cmd.push(cmd.to_string());
+        let mut full_cmd = vec![cmd.to_string()];
         match args {
             Some(args) => {
                 for arg in args {
@@ -152,7 +151,7 @@ impl Runtime {
             let mut stdout = stdout.lock().into_raw_mode()?;
             // pipe docker exec output into stdout
             while let Some(Ok(output)) = output.next().await {
-                stdout.write(output.into_bytes().as_ref())?;
+                stdout.write_all(output.into_bytes().as_ref())?;
                 stdout.flush()?;
             }
         }
@@ -165,6 +164,6 @@ impl Runtime {
                 }),
             )
             .await?;
-        return Ok(());
+        Ok(())
     }
 }

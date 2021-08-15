@@ -45,19 +45,16 @@ impl Manager {
     }
 
     fn generate_scripts(&self, binaries_path: &PathBuf, container: &Container) -> Result<()> {
-        match container.links.clone() {
-            Some(links) => {
-                for (name, container) in links {
-                    log::debug!(
-                        "Creating binary `{}` linked to container `{}` ",
-                        name,
-                        container
-                    );
+        if let Some(links) = container.links.clone() {
+            for (name, container) in links {
+                log::debug!(
+                    "Creating binary `{}` linked to container `{}` ",
+                    name,
+                    container
+                );
 
-                    self.write_container_script(&name, &binaries_path, &container)?
-                }
+                self.write_container_script(&name, binaries_path, &container)?
             }
-            None => {}
         };
         Ok(())
     }
@@ -71,7 +68,7 @@ impl Manager {
     }
 
     pub async fn run(&self, alias: &str, args: Vec<&str>) -> Result<()> {
-        match self.config.get_container_by_alias(&alias) {
+        match self.config.get_container_by_alias(alias) {
             Some(container) => {
                 let (name, container) = container?;
 
@@ -91,7 +88,7 @@ impl Manager {
                     "/var/run/docker.sock".to_string(),
                 );
 
-                let mut args: Vec<String> = args.clone().iter().map(|s| s.to_string()).collect();
+                let mut _args: Vec<String> = args.clone().iter().map(|s| s.to_string()).collect();
                 // let mut init_args = vec!["-vvv".to_string(),"init".to_string(), container.cmd.clone()];
                 // init_args.append(&mut args);
 

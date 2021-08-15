@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
-use std::io::{BufReader, Read, Write};
+use std::io::{BufReader, Read};
 use std::path::PathBuf;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -49,7 +49,7 @@ impl fmt::Debug for Errors {
                 missing_container.link, missing_container.container
             )?;
         }
-        return Ok(());
+        Ok(())
     }
 }
 
@@ -69,7 +69,7 @@ impl fmt::Display for Errors {
                 missing_container.link, missing_container.container
             )?;
         }
-        return Ok(());
+        Ok(())
     }
 }
 
@@ -110,15 +110,15 @@ impl Config {
     }
 
     pub fn get_container_by_name(&self, name: &String) -> Option<&Container> {
-        return self.containers.get(name);
+        self.containers.get(name)
     }
 
     pub fn available_aliases(&self) -> Keys<'_, String, String> {
-        return self.aliases.keys();
+        self.aliases.keys()
     }
 
     pub fn validate<'a>(&self) -> Result<(), Errors> {
-        return Ok(());
+        Ok(())
         // return Err(Errors {
         //     missing_containers_for_alias: vec![MissingContainerForAlias {
         //         container: String::from("container-value"),

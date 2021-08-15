@@ -1,4 +1,5 @@
 use anyhow::Context;
+use anyhow::Result;
 use regex::Regex;
 use serde::de;
 use serde::de::{Deserialize, Deserializer};
@@ -11,12 +12,10 @@ use std::env::consts::OS as CURRENT_ARCHITECTURE;
 use std::error;
 use std::fmt;
 
-use crate::verify::Algorithm;
-
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ImageSpec {
+pub struct Image {
     #[serde(rename = "architecture")]
-    pub architecture: String,
+    pub architecture: Architecture,
 
     #[serde(rename = "author")]
     pub author: Option<String>,
@@ -27,11 +26,10 @@ pub struct ImageSpec {
     #[serde(rename = "created")]
     pub created: Option<String>,
 
-    #[serde(rename = "history")]
-    pub history: Option<Vec<History>>,
-
+    // #[serde(rename = "history")]
+    // pub history: Option<Vec<History>>,
     #[serde(rename = "os")]
-    pub os: String,
+    pub os: OperatingSystem,
 
     #[serde(rename = "rootfs")]
     pub rootfs: Rootfs,
@@ -67,23 +65,23 @@ pub struct Config {
     pub working_dir: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct History {
-    #[serde(rename = "author")]
-    pub author: Option<String>,
+// #[derive(Serialize, Deserialize, Debug)]
+// pub struct History {
+//     #[serde(rename = "author")]
+//     pub author: Option<String>,
 
-    #[serde(rename = "comment")]
-    pub comment: Option<String>,
+//     #[serde(rename = "comment")]
+//     pub comment: Option<String>,
 
-    #[serde(rename = "created")]
-    pub created: Option<String>,
+//     #[serde(rename = "created")]
+//     pub created: Option<String>,
 
-    #[serde(rename = "created_by")]
-    pub created_by: Option<String>,
+//     #[serde(rename = "created_by")]
+//     pub created_by: Option<String>,
 
-    #[serde(rename = "empty_layer")]
-    pub empty_layer: Option<bool>,
-}
+//     #[serde(rename = "empty_layer")]
+//     pub empty_layer: Option<bool>,
+// }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Rootfs {
@@ -106,10 +104,10 @@ pub struct Manifest {
     pub schema_version: u32,
 
     #[serde(rename = "config")]
-    pub config: Discriptor,
+    pub config: Descriptor,
 
     #[serde(rename = "layers")]
-    pub layers: Vec<Discriptor>,
+    pub layers: Vec<Descriptor>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -118,7 +116,7 @@ pub struct ManifestList {
     pub schema_version: u32,
 
     #[serde(rename = "manifests")]
-    pub manifests: Vec<Manifest>,
+    pub manifests: Vec<ManifestItem>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -152,7 +150,7 @@ pub struct Platform {
 }
 
 impl Platform {
-    fn supported(&self) -> bool {
+    pub fn supported(&self) -> bool {
         if CURRENT_OS != "linux" && CURRENT_OS != "windows" {
             return false;
         }
@@ -180,7 +178,7 @@ impl Platform {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum Architecture {
     #[serde(rename = "ppc64")]
     PPC64,
@@ -283,7 +281,7 @@ pub enum Variant {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Discriptor {
+pub struct Descriptor {
     #[serde(rename = "mediaType")]
     pub media_type: String,
 
@@ -297,7 +295,19 @@ pub struct Discriptor {
 }
 
 const DIGEST_PATTERN: &str =
-    "^(?P<algorithm>[a-z0-9]+(?:[+._-][a-z0-9]+)?)(?P<encoded>[a-zA-Z0-9=_-]+)$";
+    "^(?P<algorithm>[a-z0-9]+(?:[+._-][a-z0-9]+)?):(?P<encoded>[a-zA-Z0-9=_-]+)$";
+
+impl From<Digest> for String {
+    fn from(digest: Digest) -> Self {
+        format!("{}:{}", digest.encoded, digest.algorithm)
+    }
+}
+
+impl From<anyhow::Error> for ParseDigestError {
+    fn from(_: anyhow::Error) -> Self {
+        ParseDigestError
+    }
+}
 
 impl TryFrom<&str> for Digest {
     type Error = ParseDigestError;
@@ -305,7 +315,7 @@ impl TryFrom<&str> for Digest {
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         let regex = Regex::new(DIGEST_PATTERN).unwrap();
         let captures = regex
-            .captures(&value)
+            .captures(value)
             .ok_or(ParseDigestError)
             .with_context(|| format!("Digest `{}` could not be parsed.", &value))?;
 
@@ -322,7 +332,8 @@ impl TryFrom<&str> for Digest {
                 "Unsupported algorithm `{}` in digest `{}`.",
                 &algorithm, &value
             )
-        })?;
+        })
+        .map_err(|_error| ParseDigestError)?;
 
         Ok(Digest {
             algorithm,
@@ -342,7 +353,7 @@ pub struct ParseDigestError;
 
 impl fmt::Display for ParseDigestError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Invalid digest format")
+        write!(f, "Invalid oci digest format")
     }
 }
 
@@ -369,7 +380,74 @@ impl Serialize for Digest {
     where
         S: Serializer,
     {
-        let val = format!("{}:{}", &self.encoded, &self.algorithm);
+        let val = format!("{}:{}", &self.algorithm, &self.encoded);
         serializer.serialize_str(val.as_str())
+    }
+}
+
+use anyhow::anyhow;
+use sha2::{digest::Digest as sha2Digest, Sha256, Sha512};
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum Algorithm {
+    SHA256,
+    SHA512,
+}
+
+impl fmt::Display for Algorithm {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+pub trait Verifyable {
+    fn algorithm(&self) -> &Algorithm;
+    fn expected_digest(&self) -> &str;
+    fn data(&self) -> &[u8];
+    fn expected_size(&self) -> Option<u64>;
+    fn actual_size(&self) -> u64;
+}
+
+pub trait Verify {
+    fn verify(&self) -> anyhow::Result<()>;
+}
+
+impl<T> Verify for T
+where
+    T: Verifyable,
+{
+    fn verify(&self) -> anyhow::Result<()> {
+        if let Some(expected_size) = self.expected_size() {
+            let actual_size = self.actual_size();
+            if expected_size != actual_size {
+                return Err(anyhow!(
+                    "Expected size `{}` is not equal to the calculated size `{}`.",
+                    expected_size,
+                    actual_size
+                ));
+            }
+        }
+
+        let calculated_digest = match &self.algorithm() {
+            Algorithm::SHA256 => {
+                let data = self.data();
+                format!("{:x}", Sha256::digest(data))
+            }
+            Algorithm::SHA512 => {
+                let data = self.data();
+                format!("{:x}", Sha512::digest(data))
+            }
+        };
+
+        let expected_digest = self.expected_digest();
+        if expected_digest == calculated_digest {
+            return Ok(());
+        }
+
+        Err(anyhow!(
+            "Expected digest `{}` is not equal to the calculated digest `{}`.",
+            expected_digest,
+            calculated_digest
+        ))
     }
 }

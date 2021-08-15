@@ -1,8 +1,6 @@
-use anyhow::Result;
+use anyhow::{Result, Context};
 use async_trait::async_trait;
 use regex::Regex;
-
-use crate::verify::Digest;
 
 pub mod docker;
 pub mod oci;
@@ -11,7 +9,7 @@ const PATTERN: &str = r"^(?:(?P<registry>[a-zA-Z0-9][a-zA-Z0-9.]+?)/)?(?P<name>[
 
 #[async_trait]
 pub trait ContainerRegistry {
-    async fn download(&self, host: &str, name: &str, reference: &str) -> Result<Image>;
+    async fn download(&self, name: &str, reference: &str) -> Result<Image>;
 }
 
 #[derive(Debug)]
@@ -47,16 +45,48 @@ impl ImageRef {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Layer {
-    pub digest: Box<dyn Digest>,
-    pub size: u64,
+    // digest: OciDigest,
+    // pub size: usize,
+    pub reference: String,
     pub bytes: Vec<u8>,
 }
 
+// impl VerifyDigest for Layer {
+//     fn algorithm(&self) -> &crate::verify::Algorithm {
+//         &self.digest.algorithm
+//     }
+
+//     fn digest(&self) -> &str {
+//         &self.digest.encoded
+//     }
+
+//     fn data(&self) -> &[u8] {
+//         &self.bytes
+//     }
+// }
+
+#[derive(Debug, Clone)]
 pub struct Image {
-    registry: String,
-    name: String,
-    size: u64,
-    layers: Vec<Layer>,
-    digest: Box<dyn Digest>,
+    pub reference: String,
+    // pub registry: String,
+    // pub name: String,
+    // pub size: u64,
+    pub layers: Vec<Layer>,
+    // digest: OciDigest,
 }
+
+// impl VerifyDigest for Image {
+//     fn algorithm(&self) -> &crate::verify::Algorithm {
+//         &self.digest.algorithm
+//     }
+
+//     fn digest(&self) -> &str {
+//         &self.digest.encoded
+//     }
+
+//     fn data(&self) -> &bytes::Bytes {
+//         todo!()
+//     }
+// }
