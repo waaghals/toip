@@ -1,2 +1,2 @@
-pub mod image;
 pub mod distribution;
+pub mod image;

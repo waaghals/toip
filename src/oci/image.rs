@@ -1,16 +1,16 @@
-use anyhow::Context;
-use anyhow::Result;
+use std::collections::HashMap;
+use std::convert::TryFrom;
+use std::env::consts::{OS as CURRENT_OS, OS as CURRENT_ARCHITECTURE};
+use std::{error, fmt};
+
+use anyhow::{anyhow, Context, Result};
 use regex::Regex;
 use serde::de;
 use serde::de::{Deserialize, Deserializer};
 use serde::ser::{Serialize, Serializer};
 use serde_derive::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::convert::TryFrom;
-use std::env::consts::OS as CURRENT_OS;
-use std::env::consts::OS as CURRENT_ARCHITECTURE;
-use std::error;
-use std::fmt;
+use sha2::digest::Digest as sha2Digest;
+use sha2::{Sha256, Sha512};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Image {
@@ -385,8 +385,20 @@ impl Serialize for Digest {
     }
 }
 
-use anyhow::anyhow;
-use sha2::{digest::Digest as sha2Digest, Sha256, Sha512};
+#[derive(Debug, Clone, PartialEq)]
+pub enum Reference {
+    Digest(Digest),
+    Tag(String),
+}
+
+impl fmt::Display for Reference {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Reference::Digest(digest) => write!(f, "{}", digest),
+            Reference::Tag(tag) => write!(f, "{}", tag),
+        }
+    }
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Algorithm {
@@ -396,7 +408,10 @@ pub enum Algorithm {
 
 impl fmt::Display for Algorithm {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
+        match self {
+            SHA256 => write!(f, "sha256"),
+            SHA512 => write!(f, "sha512"),
+        }
     }
 }
 

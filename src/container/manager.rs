@@ -1,10 +1,11 @@
-use anyhow::{anyhow, Context, Result};
 use std::collections::HashMap;
 use std::env::current_exe;
-use std::fs::{create_dir_all, metadata, File, hard_link};
+use std::fs::{create_dir_all, hard_link, metadata, File};
 use std::io::prelude::*;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
+
+use anyhow::{anyhow, Context, Result};
 
 use crate::config::{Config, Container, RuntimeConfig};
 use crate::container::Runtime;
@@ -94,7 +95,8 @@ impl Manager {
 
                 self.runtime
                     .run_container(
-                        &container.image,
+                        &"".to_string(),
+                        // &container.image,
                         // &"bash".to_string(),
                         &String::from("bash"),
                         &None,

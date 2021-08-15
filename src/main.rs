@@ -1,21 +1,21 @@
-use anyhow::{Context, Result};
 use std::env::current_dir;
 use std::fs::OpenOptions;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
+
+use anyhow::{Context, Result};
+use config::RuntimeConfig;
 use structopt::StructOpt;
 
-use config::RuntimeConfig;
-use oci::distribution::build_registry;
-use oci::distribution::Registry;
+use crate::image::manager::{ImageManager, Manager};
 
 mod config;
 mod container;
+mod image;
 mod init;
 mod logger;
 mod metadata;
 mod oci;
-
 
 #[derive(StructOpt, Debug)]
 #[structopt(about = "Tools to allow separate containers to call each other")]
@@ -97,8 +97,8 @@ async fn main() -> Result<()> {
                 .collect::<Vec<String>>()
                 .join("\n");
 
-            let config: RuntimeConfig = serde_json::from_str(&lines)
-                .context("Could not parse exec information")?;
+            let config: RuntimeConfig =
+                serde_json::from_str(&lines).context("Could not parse exec information")?;
 
             let container = config
                 .config
@@ -106,23 +106,18 @@ async fn main() -> Result<()> {
                 .unwrap();
 
             let runtime = container::Runtime::new();
-            runtime
-                .run_container(&container.image, &container.cmd, &Some(args), &None, &None)
-                .await?
+            todo!();
+            // runtime
+            //     .run_container(&container.image, &container.cmd, &Some(args), &None, &None)
+            //     .await?
         }
         Command::Inject {} => {
             log::debug!("Command: inject.");
-            
-            let name = "libpod/alpine";
-            let registry = build_registry("quay.io");
-            let manifest = registry.manifest(name, "latest").await?;
-            let image = registry.image(name, &manifest.config).await?;
-            
-            // let image = client.download("quay.io","libpod/alpine", "latest").await?;
-            println!("{:#?}", image);
-            for layer in manifest.layers {
-                let _blob = registry.layer(name, &layer).await?;
-                println!("LAYER: `{}`", layer.digest);            
+            let dir = current_dir().unwrap();
+            let config = config::from_dir(&dir).unwrap();
+            let image_manager = Manager {};
+            for container in config.containers() {
+                image_manager.prepare(&container.image).await?;
             }
         }
     }

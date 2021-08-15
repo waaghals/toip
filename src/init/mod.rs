@@ -1,17 +1,15 @@
+use std::fs::File;
+use std::os::unix::io::AsRawFd;
+use std::os::unix::process::CommandExt;
+use std::process::Command;
 
-use anyhow::anyhow;
-use anyhow::Context;
-use anyhow::Result;
+use anyhow::{anyhow, Context, Result};
 use nix::errno::Errno;
 use nix::libc::{pid_t, STDIN_FILENO};
 use nix::sys::signal::{kill, SigSet, Signal};
 use nix::sys::signalfd::SignalFd;
 use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
 use nix::unistd::{getpgrp, setpgid, tcsetpgrp, Pid};
-use std::fs::File;
-use std::os::unix::io::AsRawFd;
-use std::os::unix::process::CommandExt;
-use std::process::Command;
 
 fn convert_to_signal(v: u32) -> Result<Signal> {
     match v as i32 {

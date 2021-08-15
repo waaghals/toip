@@ -1,29 +1,13 @@
 {
-    "aliases": {
-      "composer": "composer_container",
-      "bash": "cowsay_container"
-    },
-    "containers": {
-      "composer_container": {
-        "image": "composer:latest",
-        "cmd": "composer",
-        "volumes": {
-          "$PWD": "/some/path"
-        }
-      },
-      "bash_container": {
-        "image": "bash:latest",
-        "cmd": "bash",
-        "links": {
-          "cowsay": "cowsay_container"
-        }
-      },
-      "cowsay_container": {
-        "image": "cowsay:latest",
-        "cmd": "cowsay",
-        "env": {
-          "COWSAY_ANIMAL": "tux"
-        }
+  "aliases": {},
+  "containers": {
+    "alpine_container": {
+      "image": "registry://quay.io/libpod/alpine@sha256:fa93b01658e3a5a1686dc3ae55f170d8de487006fb53a28efcd12ab0710a2e5f",
+      "cmd": "sh",
+      "links": {
+        "cowsay": "cowsay_container",
+        "composer": "composer_container"
       }
     }
   }
+}

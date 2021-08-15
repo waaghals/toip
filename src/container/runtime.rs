@@ -1,3 +1,7 @@
+use std::collections::HashMap;
+use std::io::{stdout, Read, Write};
+use std::time::Duration;
+
 use anyhow::Result;
 use bollard::container::{Config as BollardConfig, RemoveContainerOptions};
 use bollard::exec::{CreateExecOptions, ResizeExecOptions, StartExecResults};
@@ -5,9 +9,6 @@ use bollard::image::CreateImageOptions;
 use bollard::models::{HostConfig, Mount, MountTypeEnum};
 use bollard::Docker;
 use futures_util::{StreamExt, TryStreamExt};
-use std::collections::HashMap;
-use std::io::{stdout, Read, Write};
-use std::time::Duration;
 #[cfg(not(windows))]
 use termion::raw::IntoRawMode;
 #[cfg(not(windows))]
@@ -19,7 +20,6 @@ use tokio::time::sleep;
 pub struct Runtime {
     docker: Docker,
 }
-
 
 impl Runtime {
     pub fn new() -> Self {
