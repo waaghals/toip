@@ -1,8 +1,3 @@
-use std::collections::HashMap;
-use std::convert::TryFrom;
-use std::env::consts::{OS as CURRENT_OS, OS as CURRENT_ARCHITECTURE};
-use std::{error, fmt};
-
 use anyhow::{anyhow, Context, Result};
 use regex::Regex;
 use serde::de;
@@ -11,6 +6,12 @@ use serde::ser::{Serialize, Serializer};
 use serde_derive::{Deserialize, Serialize};
 use sha2::digest::Digest as sha2Digest;
 use sha2::{Sha256, Sha512};
+use std::collections::HashMap;
+use std::convert::TryFrom;
+use std::env::consts::{ARCH as CURRENT_ARCHITECTURE, OS as CURRENT_OS};
+use std::fmt::Display;
+use std::{error, fmt};
+use thiserror::Error;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Image {
@@ -119,6 +120,17 @@ pub struct ManifestList {
     pub manifests: Vec<ManifestItem>,
 }
 
+impl ManifestList {
+    pub fn supported(&self) -> Option<&ManifestItem> {
+        let os = host_os()?;
+        let arch = host_arch()?;
+
+        self.manifests
+            .iter()
+            .find(|item| item.platform.os == os && item.platform.architecture == arch)
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ManifestItem {
     #[serde(rename = "mediaType")]
@@ -132,6 +144,12 @@ pub struct ManifestItem {
 
     #[serde(rename = "platform")]
     pub platform: Platform,
+}
+
+impl fmt::Display for ManifestItem {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.platform)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -149,32 +167,44 @@ pub struct Platform {
     pub variant: Option<Variant>,
 }
 
-impl Platform {
-    pub fn supported(&self) -> bool {
-        if CURRENT_OS != "linux" && CURRENT_OS != "windows" {
-            return false;
+impl fmt::Display for Platform {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(variant) = &self.variant {
+            write!(f, "{:?}/{:?} ({:?})", self.os, self.architecture, variant)
+        } else {
+            write!(f, "{:?}/{:?}", self.os, self.architecture)
         }
-        if CURRENT_ARCHITECTURE != "x86"
-            && CURRENT_ARCHITECTURE != "x86_64"
-            && CURRENT_ARCHITECTURE != "arm"
-            && CURRENT_ARCHITECTURE != "aarch64"
-        {
-            return false;
-        }
+    }
+}
 
-        if CURRENT_ARCHITECTURE == "x64" && self.architecture == Architecture::X86 {
-            return true;
-        }
-        if CURRENT_ARCHITECTURE == "x64_64" && self.architecture == Architecture::AMD64 {
-            return true;
-        }
-        if CURRENT_ARCHITECTURE == "arm" && self.architecture == Architecture::ARM {
-            return true;
-        }
-        if CURRENT_ARCHITECTURE == "aarch64" && self.architecture == Architecture::ARM64 {
-            return true;
-        }
-        false
+fn host_os() -> Option<OperatingSystem> {
+    match CURRENT_OS {
+        "linux" => Some(OperatingSystem::Linux),
+        "macos" => Some(OperatingSystem::Darwin),
+        "ios" => Some(OperatingSystem::IOS),
+        "freebsd" => Some(OperatingSystem::FreeBSD),
+        "dragonfly" => Some(OperatingSystem::Dragonfly),
+        "netbsd" => Some(OperatingSystem::NetBSD),
+        "openbsd" => Some(OperatingSystem::OpenBSD),
+        "solaris" => Some(OperatingSystem::Solaris),
+        "android" => Some(OperatingSystem::Android),
+        "windows" => Some(OperatingSystem::Windows),
+        _ => None,
+    }
+}
+
+fn host_arch() -> Option<Architecture> {
+    match CURRENT_ARCHITECTURE {
+        "x86" => Some(Architecture::X86),
+        "x86_64" => Some(Architecture::AMD64),
+        "arm" => Some(Architecture::ARM),
+        "aarch64" => Some(Architecture::ARM64),
+        "mips" => Some(Architecture::MIPS),
+        "mips64" => Some(Architecture::MIPS64),
+        "powerpc64" => Some(Architecture::PPC64),
+        "riscv64" => Some(Architecture::RISCV64),
+        "s390x" => Some(Architecture::S390x),
+        "sparc64" | "powerpc" | _ => None,
     }
 }
 
@@ -220,7 +250,7 @@ pub enum Architecture {
     S390x,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum OperatingSystem {
     #[serde(rename = "aix")]
     AIX,
@@ -294,6 +324,12 @@ pub struct Descriptor {
     // pub annotations: Option<HashMap<String, String>>,
 }
 
+impl fmt::Display for Descriptor {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}@{}", self.media_type, self.digest)
+    }
+}
+
 const DIGEST_PATTERN: &str =
     "^(?P<algorithm>[a-z0-9]+(?:[+._-][a-z0-9]+)?):(?P<encoded>[a-zA-Z0-9=_-]+)$";
 
@@ -302,38 +338,32 @@ impl From<Digest> for String {
         format!("{}:{}", digest.encoded, digest.algorithm)
     }
 }
-
-impl From<anyhow::Error> for ParseDigestError {
-    fn from(_: anyhow::Error) -> Self {
-        ParseDigestError
-    }
-}
+// impl From<anyhow::Error> for ParseDigestError {
+//     fn from(_: anyhow::Error) -> Self {
+//         ParseDigestError
+//     }
+// }
 
 impl TryFrom<&str> for Digest {
     type Error = ParseDigestError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         let regex = Regex::new(DIGEST_PATTERN).unwrap();
-        let captures = regex
-            .captures(value)
-            .ok_or(ParseDigestError)
-            .with_context(|| format!("Digest `{}` could not be parsed.", &value))?;
+        let captures = regex.captures(value).ok_or(ParseDigestError::Unparsable {
+            input: value.to_string(),
+        })?;
 
-        let algorithm = captures.name("algorithm").unwrap().as_str();
+        let captured_algorithm = captures.name("algorithm").unwrap().as_str();
         let encoded = captures.name("encoded").unwrap().as_str();
 
-        let algorithm = match algorithm {
+        let algorithm = match captured_algorithm {
             "sha256" => Ok(Algorithm::SHA256),
             "sha512" => Ok(Algorithm::SHA512),
-            _ => Err(ParseDigestError),
-        }
-        .with_context(|| {
-            format!(
-                "Unsupported algorithm `{}` in digest `{}`.",
-                &algorithm, &value
-            )
-        })
-        .map_err(|_error| ParseDigestError)?;
+            _ => Err(ParseDigestError::UnsupportedAlgorithm {
+                algorithm: captured_algorithm.to_string(),
+                input: value.to_string(),
+            }),
+        }?;
 
         Ok(Digest {
             algorithm,
@@ -348,16 +378,13 @@ pub struct Digest {
     pub encoded: String,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct ParseDigestError;
-
-impl fmt::Display for ParseDigestError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Invalid oci digest format")
-    }
+#[derive(Clone, Debug, PartialEq, Error)]
+pub enum ParseDigestError {
+    #[error("unparsable digest `{input}`")]
+    Unparsable { input: String },
+    #[error("unsupported algorithm `{algorithm}` in digest `{input}`")]
+    UnsupportedAlgorithm { algorithm: String, input: String },
 }
-
-impl error::Error for ParseDigestError {}
 
 impl fmt::Display for Digest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -409,60 +436,8 @@ pub enum Algorithm {
 impl fmt::Display for Algorithm {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            SHA256 => write!(f, "sha256"),
-            SHA512 => write!(f, "sha512"),
+            Algorithm::SHA256 => write!(f, "sha256"),
+            Algorithm::SHA512 => write!(f, "sha512"),
         }
-    }
-}
-
-pub trait Verifyable {
-    fn algorithm(&self) -> &Algorithm;
-    fn expected_digest(&self) -> &str;
-    fn data(&self) -> &[u8];
-    fn expected_size(&self) -> Option<u64>;
-    fn actual_size(&self) -> u64;
-}
-
-pub trait Verify {
-    fn verify(&self) -> anyhow::Result<()>;
-}
-
-impl<T> Verify for T
-where
-    T: Verifyable,
-{
-    fn verify(&self) -> anyhow::Result<()> {
-        if let Some(expected_size) = self.expected_size() {
-            let actual_size = self.actual_size();
-            if expected_size != actual_size {
-                return Err(anyhow!(
-                    "Expected size `{}` is not equal to the calculated size `{}`.",
-                    expected_size,
-                    actual_size
-                ));
-            }
-        }
-
-        let calculated_digest = match &self.algorithm() {
-            Algorithm::SHA256 => {
-                let data = self.data();
-                format!("{:x}", Sha256::digest(data))
-            }
-            Algorithm::SHA512 => {
-                let data = self.data();
-                format!("{:x}", Sha512::digest(data))
-            }
-        };
-
-        let expected_digest = self.expected_digest();
-        if expected_digest == calculated_digest {
-            return Ok(());
-        }
-
-        Err(anyhow!(
-            "Expected digest `{}` is not equal to the calculated digest `{}`.",
-            expected_digest,
-            calculated_digest
-        ))
     }
 }

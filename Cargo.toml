@@ -1,6 +1,7 @@
 [package]
 name = "doe"
 version = "0.1.0"
+license = "MIT"
 homepage = "https://waaghals.dev/doe"
 authors = ["Patrick \"Waaghals\" Berenschot <waaghals@protonmail.com>"]
 edition = "2018"
@@ -28,6 +29,8 @@ async-trait = "0.1.51"
 bytes = "1.0.1"
 sha2 = "0.9.5"
 flate2 = "1.0.20"
+thiserror = "1.0.26"
+directories = "3.0"
 # shellexpand = "2.0.0"
 # walkdir = "2.3.1"
 

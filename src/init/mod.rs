@@ -61,10 +61,10 @@ fn reap_zombies() -> Result<Vec<Pid>> {
             }
             Ok(WaitStatus::StillAlive) => break,
 
-            status @ Ok(_) => log::error!("Received unknown status: `{:?}`", status),
+            status @ Ok(_) => log::error!("received unknown status: `{:?}`", status),
             Err(err) => {
                 return Err(anyhow!(
-                    "Received unexpected error while waiting for status: {}",
+                    "received unexpected error while waiting for status: {}",
                     err
                 ))
             }
@@ -97,7 +97,7 @@ fn make_foreground() -> Result<()> {
     let tty = match File::open("/dev/tty") {
         Ok(tty) => tty.as_raw_fd(),
         Err(err) => {
-            log::debug!("Could not open /dev/tty: {}", err);
+            log::debug!("could not open /dev/tty: {}", err);
             STDIN_FILENO
         }
     };
@@ -113,16 +113,16 @@ fn make_foreground() -> Result<()> {
         Ok(_) => Ok(()),
 
         Err(Errno::ENOTTY) | Err(Errno::EBADF) => {
-            log::debug!("Setting foreground process failed because there is no tty present.");
+            log::debug!("setting foreground process failed because there is no tty present.");
             Ok(())
         }
         Err(Errno::ENXIO) => {
-            log::debug!("Setting foreground process failed because there is no such device.");
+            log::debug!("setting foreground process failed because there is no such device.");
             Ok(())
         }
 
         Err(err) => Err(anyhow!(
-            "Error while bringing process to foreground: {}",
+            "error while bringing process to foreground: {}",
             err
         )),
     }
@@ -136,7 +136,7 @@ pub fn spawn(cmd: String, args: Vec<String>) -> Result<()> {
     sigmask.thread_block().expect("could not block all signals");
     let mut sfd = SignalFd::new(&sigmask).expect("could not create signalfd for all signals");
 
-    log::debug!("Spawning cmd `{}` with arguments `{:#?}`", cmd, args);
+    log::debug!("spawning cmd `{}` with arguments `{:#?}`", cmd, args);
     let child = unsafe {
         Command::new(&cmd).args(&args).pre_exec(move || {
             make_foreground().unwrap();
@@ -145,10 +145,10 @@ pub fn spawn(cmd: String, args: Vec<String>) -> Result<()> {
         })
     }
     .spawn()
-    .with_context(|| format!("Could not spawn child `{}`", cmd))?;
+    .with_context(|| format!("could not spawn child `{}`", cmd))?;
 
     let pid = Pid::from_raw(child.id() as pid_t);
-    log::info!("Spawned child process `{}`", pid);
+    log::info!("spawned child process `{}`", pid);
 
     loop {
         match handle_signals(pid, &mut sfd) {

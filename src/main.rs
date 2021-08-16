@@ -16,6 +16,7 @@ mod init;
 mod logger;
 mod metadata;
 mod oci;
+mod dirs;
 
 #[derive(StructOpt, Debug)]
 #[structopt(about = "Tools to allow separate containers to call each other")]
@@ -66,11 +67,11 @@ async fn main() -> Result<()> {
     logger::init(cli.verbosity.log_level());
     match cli.command {
         Command::Init { cmd, args } => {
-            log::debug!("Command: init. cmd: {} args: {:#?}", cmd, args);
+            log::debug!("command: init. cmd: {} args: {:#?}", cmd, args);
             init::spawn(cmd, args)?
         }
         Command::Run { alias, args } => {
-            log::debug!("Command: run. alias: {} args: {:#?}", alias, args);
+            log::debug!("command: run. alias: {} args: {:#?}", alias, args);
 
             let dir = current_dir().unwrap();
             // config.validate()?;
@@ -87,7 +88,7 @@ async fn main() -> Result<()> {
             manager.run(&alias, args).await?
         }
         Command::Exec { file, args } => {
-            log::debug!("Command: exec. file: {:#?}", file);
+            log::debug!("command: exec. file: {:#?}", file);
             let file = OpenOptions::new().read(true).write(true).open(file)?;
 
             let lines = BufReader::new(file)
@@ -98,7 +99,7 @@ async fn main() -> Result<()> {
                 .join("\n");
 
             let config: RuntimeConfig =
-                serde_json::from_str(&lines).context("Could not parse exec information")?;
+                serde_json::from_str(&lines).context("could not parse exec information")?;
 
             let container = config
                 .config
@@ -112,7 +113,7 @@ async fn main() -> Result<()> {
             //     .await?
         }
         Command::Inject {} => {
-            log::debug!("Command: inject.");
+            log::debug!("command: inject.");
             let dir = current_dir().unwrap();
             let config = config::from_dir(&dir).unwrap();
             let image_manager = Manager {};
