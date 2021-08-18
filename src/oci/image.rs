@@ -1,16 +1,13 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::Result;
 use regex::Regex;
 use serde::de;
 use serde::de::{Deserialize, Deserializer};
 use serde::ser::{Serialize, Serializer};
 use serde_derive::{Deserialize, Serialize};
-use sha2::digest::Digest as sha2Digest;
-use sha2::{Sha256, Sha512};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::env::consts::{ARCH as CURRENT_ARCHITECTURE, OS as CURRENT_OS};
-use std::fmt::Display;
-use std::{error, fmt};
+use std::fmt;
 use thiserror::Error;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -87,7 +84,7 @@ pub struct Config {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Rootfs {
     #[serde(rename = "diff_ids")]
-    pub diff_ids: Vec<String>,
+    pub diff_ids: Vec<Digest>,
 
     #[serde(rename = "type")]
     pub fs_type: Type,

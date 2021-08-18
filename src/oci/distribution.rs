@@ -1,7 +1,7 @@
+use std::fmt;
 use std::fs;
 use std::io::Read;
 use std::path::PathBuf;
-use std::fmt;
 
 use anyhow::{anyhow, Context as AnyhowContext, Result};
 use async_trait::async_trait;
@@ -14,7 +14,7 @@ use std::env::consts::{ARCH, OS};
 use thiserror::Error;
 
 use super::image::{Algorithm, Descriptor, Digest, Image, Manifest, ManifestItem, Reference};
-use crate::dirs::project_directories;
+use crate::dirs::blob_dir;
 use crate::metadata::{HOMEPAGE, NAME, VERSION};
 use crate::oci::image::ManifestList;
 
@@ -51,27 +51,20 @@ trait Downloader {
 
 #[async_trait]
 pub trait Registry {
-    async fn manifest(&self, name: &str, reference: &Reference) -> Result<Manifest>;
-    async fn image(&self, name: &str, descriptor: &Descriptor) -> Result<Image>;
-    async fn layer(&self, name: &str, descriptor: &Descriptor) -> Result<Vec<u8>>;
+    async fn manifest(&self, host: &str, name: &str, reference: &Reference) -> Result<Manifest>;
+    async fn image(&self, host: &str, name: &str, descriptor: &Descriptor) -> Result<Image>;
+    async fn layer(&self, host: &str, name: &str, descriptor: &Descriptor) -> Result<Vec<u8>>;
 }
 
-#[derive(Debug)]
-struct OciRegistry<D> {
-    host: String,
-    downloader: D,
+pub struct OciRegistry {
+    // TODO cleanup this type. Cannot use Box<dyn ...> because of generic arguments in a method
+    downloader: DecompressDownloader<VerifyingDownloader<CachingDownloader<VerifyingDownloader<ReqwestDownloader>>>>,
 }
 
-// TODO use builder pattern
-pub fn build_registry<H>(host: H) -> impl Registry
-where
-    H: Into<String>,
-{
-    log::trace!("constructing Registry client");
-    let cache_dir = project_directories().cache_dir().to_path_buf();
-    OciRegistry {
-        host: host.into(),
-        downloader: DecompressDownloader {
+impl Default for OciRegistry {
+    fn default() -> Self {
+        let cache_dir = blob_dir();
+        let downloader = DecompressDownloader {
             inner: VerifyingDownloader {
                 context: "cache",
                 inner: CachingDownloader {
@@ -82,34 +75,28 @@ where
                     },
                 },
             },
-        },
+        };
+        OciRegistry {
+            downloader,
+        }
     }
 }
 
-impl<D> OciRegistry<D>
-where
-    D: Downloader,
-{
-    fn blob_url(&self, name: &str, descriptor: &Descriptor) -> String {
-        format!(
-            "https://{}/v2/{}/blobs/{}",
-            self.host, name, descriptor.digest
-        )
+impl OciRegistry {
+    fn blob_url(&self, host: &str, name: &str, descriptor: &Descriptor) -> String {
+        format!("https://{}/v2/{}/blobs/{}", host, name, descriptor.digest)
     }
 }
 
 #[async_trait]
-impl<D> Registry for OciRegistry<D>
-where
-    D: Downloader + Sync + Send,
-{
-    async fn manifest(&self, name: &str, reference: &Reference) -> Result<Manifest> {
+impl Registry for OciRegistry {
+    async fn manifest(&self, host: &str, name: &str, reference: &Reference) -> Result<Manifest> {
         log::debug!(
             "fetching manifest for `{}` with reference `{}`",
             name,
             reference
         );
-        let url = format!("https://{}/v2/{}/manifests/{}", self.host, name, reference);
+        let url = format!("https://{}/v2/{}/manifests/{}", host, name, reference);
         let context = match reference {
             Reference::Digest(digest) => Context::Digest(digest),
             Reference::Tag(_) => Context::None,
@@ -150,10 +137,8 @@ where
                 })?;
                 log::info!("found matching manifest `{}` for `{}`", item.digest, name);
 
-                let manifest_url = format!(
-                    "https://{}/v2/{}/manifests/{}",
-                    self.host, name, item.digest
-                );
+                let manifest_url =
+                    format!("https://{}/v2/{}/manifests/{}", host, name, item.digest);
                 let manifest_response = self
                     .downloader
                     .download(
@@ -179,13 +164,13 @@ where
         }
     }
 
-    async fn image(&self, name: &str, descriptor: &Descriptor) -> Result<Image> {
+    async fn image(&self, host: &str, name: &str, descriptor: &Descriptor) -> Result<Image> {
         log::debug!(
             "fetching image config for `{}` with digest `{}`",
             name,
             descriptor.digest
         );
-        let uri = self.blob_url(name, descriptor);
+        let uri = self.blob_url(host, name, descriptor);
         let response = self
             .downloader
             .download(
@@ -200,13 +185,13 @@ where
         Ok(image)
     }
 
-    async fn layer(&self, name: &str, descriptor: &Descriptor) -> Result<Vec<u8>> {
+    async fn layer(&self, host: &str, name: &str, descriptor: &Descriptor) -> Result<Vec<u8>> {
         log::debug!(
             "fetching layer for `{}` with digest `{}`",
             name,
             descriptor.digest
         );
-        let uri = self.blob_url(name, descriptor);
+        let uri = self.blob_url(host, name, descriptor);
         let response = self
             .downloader
             .download(uri, vec![], &Context::Descriptor(descriptor))
@@ -295,7 +280,7 @@ impl<T> VerifyingDownloader<T> {
             return Err(VerifyError::InvalidSize {
                 context: self.context,
                 actual: actual_size,
-                expected: actual_size,
+                expected: expected_size,
             });
         }
         Ok(())

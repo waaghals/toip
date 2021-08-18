@@ -7,16 +7,16 @@ use anyhow::{Context, Result};
 use config::RuntimeConfig;
 use structopt::StructOpt;
 
-use crate::image::manager::{ImageManager, Manager};
-
+use crate::image::manager::ImageManager;
 mod config;
+mod runtime;
 mod container;
+mod dirs;
 mod image;
 mod init;
 mod logger;
 mod metadata;
 mod oci;
-mod dirs;
 
 #[derive(StructOpt, Debug)]
 #[structopt(about = "Tools to allow separate containers to call each other")]
@@ -76,16 +76,18 @@ async fn main() -> Result<()> {
             let dir = current_dir().unwrap();
             // config.validate()?;
             let config = config::from_dir(&dir).unwrap();
+            todo!();
+            // let runtime = CommandRuntime::new("runc");
 
-            let runtime = container::Runtime::new();
-            let manager = container::Manager {
-                workdir: dir,
-                config,
-                runtime,
-            };
+            // let runtime = container::Runtime::new();
+            // let manager = container::Manager {
+            //     workdir: dir,
+            //     config,
+            //     runtime,
+            // };
 
-            let args = args.iter().map(|a| a.as_str()).collect();
-            manager.run(&alias, args).await?
+            // let args = args.iter().map(|a| a.as_str()).collect();
+            // manager.run(&alias, args).await?
         }
         Command::Exec { file, args } => {
             log::debug!("command: exec. file: {:#?}", file);
@@ -116,7 +118,7 @@ async fn main() -> Result<()> {
             log::debug!("command: inject.");
             let dir = current_dir().unwrap();
             let config = config::from_dir(&dir).unwrap();
-            let image_manager = Manager {};
+            let mut image_manager = ImageManager::default();
             for container in config.containers() {
                 image_manager.prepare(&container.image).await?;
             }

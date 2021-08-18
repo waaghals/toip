@@ -17,39 +17,41 @@ use crate::oci::image::Reference;
 const REGISTRY_PATTERN: &str = r"^(?:(?P<registry>[a-zA-Z0-9][a-zA-Z0-9.]+?)/)?(?P<repository>[a-z0-9][a-z0-9._-]*(?:/[a-z0-9][a-z0-9._-]*)?)(?:(?::(?P<tag>[a-zA-Z0-9_][a-zA-Z0-9._-]+))|@(?P<digest>[a-zA-Z0-9]+:[a-zA-Z0-9]+))?$";
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct RegistryImage {
+pub struct RegistrySource {
     pub registry: String,
     pub repository: String,
     pub reference: Reference,
 }
 
-impl fmt::Display for RegistryImage {
+impl fmt::Display for RegistrySource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.reference {
-            Reference::Digest(digest) => write!(f, "{}/{}@{}", self.registry, self.repository, digest),
+            Reference::Digest(digest) => {
+                write!(f, "{}/{}@{}", self.registry, self.repository, digest)
+            }
             Reference::Tag(tag) => write!(f, "{}/{}:{}", self.registry, self.repository, tag),
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-struct Path {
+pub struct PathSource {
     context: PathBuf,
 }
 
-impl fmt::Display for Path {
+impl fmt::Display for PathSource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", &self.context)
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-struct Build {
+pub struct BuildSource {
     container_file: Option<PathBuf>,
     context: PathBuf,
 }
 
-impl fmt::Display for Build {
+impl fmt::Display for BuildSource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.container_file {
             Some(container_file) => {
@@ -61,13 +63,13 @@ impl fmt::Display for Build {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum ImageReference {
-    Registry(RegistryImage),
-    Path(Path),
-    Build(Build),
+pub enum ImageSource {
+    Registry(RegistrySource),
+    Path(PathSource),
+    Build(BuildSource),
 }
 
-impl TryFrom<&str> for RegistryImage {
+impl TryFrom<&str> for RegistrySource {
     type Error = ParseImageError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
@@ -96,7 +98,7 @@ impl TryFrom<&str> for RegistryImage {
         };
         let repository = captures.name("repository").unwrap().as_str();
 
-        Ok(RegistryImage {
+        Ok(RegistrySource {
             registry: registry.into(),
             repository: repository.into(),
             reference,
@@ -104,7 +106,7 @@ impl TryFrom<&str> for RegistryImage {
     }
 }
 
-impl TryFrom<&str> for Path {
+impl TryFrom<&str> for PathSource {
     type Error = ParseImageError;
 
     fn try_from(_value: &str) -> Result<Self, Self::Error> {
@@ -112,7 +114,7 @@ impl TryFrom<&str> for Path {
     }
 }
 
-impl TryFrom<&str> for Build {
+impl TryFrom<&str> for BuildSource {
     type Error = ParseImageError;
 
     fn try_from(_value: &str) -> Result<Self, Self::Error> {
@@ -120,34 +122,34 @@ impl TryFrom<&str> for Build {
     }
 }
 
-impl TryFrom<&str> for ImageReference {
+impl TryFrom<&str> for ImageSource {
     type Error = ParseImageError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         if value.starts_with("registry://") {
             let part = &value[11..];
             let registry = part.try_into()?;
-            Ok(ImageReference::Registry(registry))
+            Ok(ImageSource::Registry(registry))
         } else if value.starts_with("build://") {
             let part = &value[8..];
             let config = part.try_into()?;
-            Ok(ImageReference::Build(config))
+            Ok(ImageSource::Build(config))
         } else if value.starts_with("path://") {
             let part = &value[7..];
             let config = part.try_into()?;
-            Ok(ImageReference::Path(config))
+            Ok(ImageSource::Path(config))
         } else {
             Err(ParseImageError::UnknownScheme)
         }
     }
 }
 
-impl fmt::Display for ImageReference {
+impl fmt::Display for ImageSource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ImageReference::Registry(registry) => write!(f, "registry://{}", registry),
-            ImageReference::Path(path) => write!(f, "path://{}", path),
-            ImageReference::Build(build) => write!(f, "build://{}", build),
+            ImageSource::Registry(registry) => write!(f, "registry://{}", registry),
+            ImageSource::Path(path) => write!(f, "path://{}", path),
+            ImageSource::Build(build) => write!(f, "build://{}", build),
         }
     }
 }
@@ -173,17 +175,17 @@ impl fmt::Display for ParseImageError {
 
 impl error::Error for ParseImageError {}
 
-impl<'de> Deserialize<'de> for ImageReference {
+impl<'de> Deserialize<'de> for ImageSource {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
         let string = String::deserialize(deserializer)?;
-        ImageReference::try_from(string.as_str()).map_err(de::Error::custom)
+        ImageSource::try_from(string.as_str()).map_err(de::Error::custom)
     }
 }
 
-impl Serialize for ImageReference {
+impl Serialize for ImageSource {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -195,7 +197,7 @@ impl Serialize for ImageReference {
 
 #[derive(Debug, DeriveDeserialize, DeriveSerialize, Clone)]
 pub struct Container {
-    pub image: ImageReference,
+    pub image: ImageSource,
     pub links: Option<HashMap<String, String>>,
     pub cmd: String,
     pub args: Option<Vec<String>>,
