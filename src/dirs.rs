@@ -26,6 +26,6 @@ pub fn blob_dir() -> PathBuf {
     cache_dir("blobs")
 }
 
-pub fn containers() -> PathBuf {
+pub fn container_dir() -> PathBuf {
     cache_dir("containers")
 }

@@ -1,7 +1,6 @@
 use std::collections::hash_map::{Keys, Values};
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
-use std::error::Error;
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::PathBuf;
@@ -11,6 +10,7 @@ use anyhow::{anyhow, Context, Result};
 use regex::Regex;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use serde_derive::{Deserialize as DeriveDeserialize, Serialize as DeriveSerialize};
+use thiserror::Error;
 
 use crate::oci::image::Reference;
 
@@ -215,57 +215,6 @@ struct MissingContainerForAlias {
     alias: String,
 }
 
-pub struct Errors {
-    missing_containers_for_alias: Vec<MissingContainerForAlias>,
-    missing_containers_for_link: Vec<MissingContainerForLink>,
-}
-
-impl fmt::Debug for Errors {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        for missing_container in &self.missing_containers_for_alias {
-            writeln!(
-                f,
-                "Alias \"{}\": no container named \"{}\".",
-                missing_container.alias, missing_container.container
-            )?;
-        }
-        for missing_container in &self.missing_containers_for_link {
-            writeln!(
-                f,
-                "Link \"{}\": no container named \"{}\".",
-                missing_container.link, missing_container.container
-            )?;
-        }
-        Ok(())
-    }
-}
-
-impl fmt::Display for Errors {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        for missing_container in &self.missing_containers_for_alias {
-            writeln!(
-                f,
-                "Alias \"{}\": no container named \"{}\".",
-                missing_container.alias, missing_container.container
-            )?;
-        }
-        for missing_container in &self.missing_containers_for_link {
-            writeln!(
-                f,
-                "Link \"{}\": no container named \"{}\".",
-                missing_container.link, missing_container.container
-            )?;
-        }
-        Ok(())
-    }
-}
-
-impl Error for Errors {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        None
-    }
-}
-
 #[derive(Debug, DeriveDeserialize, DeriveSerialize, Clone)]
 pub struct Config {
     containers: HashMap<String, Container>,
@@ -278,21 +227,28 @@ pub struct RuntimeConfig {
     pub config: Config,
 }
 
+#[derive(Error, Debug)]
+pub enum ContainerError {
+    #[error("unknown alias `{alias}`")]
+    UnknownAlias { alias: String },
+
+    #[error("unknown container `{container}` for alias `{alias}`")]
+    UnknownContainer { alias: String, container: String },
+}
+
 impl Config {
-    pub fn get_container_by_alias(&self, name: &str) -> Option<Result<(&str, &Container)>> {
-        match self.aliases.get(name) {
-            Some(container_name) => {
-                let result = match self.containers.get(container_name) {
-                    Some(container) => Ok((container_name.as_str(), container)),
-                    None => Err(anyhow!(
-                        "Alias `{}` resolves to unknown container `{}`.",
-                        name,
-                        container_name
-                    )),
-                };
-                Some(result)
-            }
-            None => None,
+    pub fn get_container_by_alias(&self, alias: &str) -> Result<&Container, ContainerError> {
+        match self.aliases.get(alias) {
+            Some(name) => match self.containers.get(name) {
+                Some(container) => Ok(container),
+                None => Err(ContainerError::UnknownContainer {
+                    alias: alias.to_string(),
+                    container: name.to_string(),
+                }),
+            },
+            None => Err(ContainerError::UnknownAlias {
+                alias: alias.to_string(),
+            }),
         }
     }
 
@@ -308,18 +264,8 @@ impl Config {
         self.aliases.keys()
     }
 
-    pub fn validate<'a>(&self) -> Result<(), Errors> {
-        Ok(())
-        // return Err(Errors {
-        //     missing_containers_for_alias: vec![MissingContainerForAlias {
-        //         container: String::from("container-value"),
-        //         alias: String::from("alias-value")
-        //     }],
-        //     missing_containers_for_link: vec![MissingContainerForLink {
-        //         container: String::from("container-value"),
-        //         link: String::from("link-value")
-        //     }]
-        // });
+    pub fn validate<'a>(&self) -> Result<()> {
+        todo!()
     }
 }
 

@@ -1,5 +1,4 @@
-use std::fmt::Display;
-use std::io::{Cursor, Read};
+use std::io::Cursor;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
@@ -35,7 +34,7 @@ impl RegistryManager {
         path
     }
 
-    fn verify_layers(&self, image: &Image) -> Result<()> {
+    fn verify_layers(&self, _image: &Image) -> Result<()> {
         // TODO
         Ok(())
     }

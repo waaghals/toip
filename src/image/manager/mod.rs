@@ -29,6 +29,7 @@ impl Default for ImageManager {
 
 impl ImageManager {
     pub async fn prepare(&mut self, source: &ImageSource) -> Result<Image> {
+        log::info!("Preparing image `{:?}`", source);
         match source {
             ImageSource::Registry(source) => {
                 if let None = self.registry {

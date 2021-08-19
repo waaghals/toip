@@ -1,4 +1,4 @@
-use super::image::Config as ImageConfig;
+use super::image::{Config as ImageConfig, Image};
 use anyhow::{Context, Result};
 use serde_derive::{Deserialize, Serialize};
 use std::fmt;
@@ -10,54 +10,32 @@ use std::{
     process::{ChildStderr, ChildStdin, ChildStdout, Command, Stdio},
 };
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Root {
-    path: PathBuf,
-    readonly: bool,
-}
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Mount {
-    destination: PathBuf,
-    source: Option<PathBuf>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Config {
-    root: Root,
-}
-
-trait Runtime {
-    fn state<C>(&self, container_id: &C) -> Result<()>
-    where
-        C: AsRef<OsStr> + fmt::Display + fmt::Debug;
-    fn create<C>(&self, container_id: &C, bundle: &PathBuf) -> Result<()>
-    where
-        C: AsRef<OsStr> + fmt::Display + fmt::Debug;
-    fn start<C>(&self, container_id: &C) -> Result<()>
-    where
-        C: AsRef<OsStr> + fmt::Display + fmt::Debug;
-    fn kill<C>(&self, container_id: &C, signal: u8) -> Result<()>
-    where
-        C: AsRef<OsStr> + fmt::Display + fmt::Debug;
-    fn delete<C>(&self, container_id: &C) -> Result<()>
+pub trait Runtime {
+    fn run<C>(&self, config: &Image) -> Result<()>
     where
         C: AsRef<OsStr> + fmt::Display + fmt::Debug;
 }
 
-pub struct CommandRuntime<S>
+pub struct OciCliRuntime<S>
 where
     S: AsRef<OsStr> + Display,
 {
     program: S, // runc, crun, youki, conmon
 }
 
-impl<S> CommandRuntime<S>
+impl Default for OciCliRuntime<&str> {
+    fn default() -> Self {
+        OciCliRuntime { program: "runc" }
+    }
+}
+
+impl<S> OciCliRuntime<S>
 where
     S: AsRef<OsStr> + Display,
 {
     pub fn new(program: S) -> Self {
-        CommandRuntime { program }
+        OciCliRuntime { program }
     }
 
     fn run<C, A>(&self, command: &'static str, container_id: &C, argument: Option<&A>) -> Result<()>
@@ -86,12 +64,7 @@ where
 
         Ok(())
     }
-}
 
-impl<S> Runtime for CommandRuntime<S>
-where
-    S: AsRef<OsStr> + Display,
-{
     fn state<C>(&self, container_id: &C) -> Result<()>
     where
         C: AsRef<OsStr> + fmt::Display + fmt::Debug,
@@ -126,6 +99,18 @@ where
         C: AsRef<OsStr> + fmt::Display + fmt::Debug,
     {
         self.run("delete", container_id, None::<&String>)
+    }
+}
+
+impl<S> Runtime for OciCliRuntime<S>
+where
+    S: AsRef<OsStr> + Display,
+{
+    fn run<C>(&self, config: &Image) -> Result<()>
+    where
+        C: AsRef<OsStr> + fmt::Display + fmt::Debug,
+    {
+        todo!()
     }
 }
 

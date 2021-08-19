@@ -26,8 +26,7 @@ pub fn init(level: Option<Level>) -> Result<()> {
         config,
         TerminalMode::Stderr,
         ColorChoice::Auto,
-    )
-    .with_context(|| format!("could not initialize logger"))?;
+    )?;
 
     Ok(())
 }

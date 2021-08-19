@@ -13,10 +13,10 @@ use sha2::{Digest as ShaDigest, Sha256, Sha512};
 use std::env::consts::{ARCH, OS};
 use thiserror::Error;
 
+use super::image::ManifestList;
 use super::image::{Algorithm, Descriptor, Digest, Image, Manifest, ManifestItem, Reference};
 use crate::dirs::blob_dir;
 use crate::metadata::{HOMEPAGE, NAME, VERSION};
-use crate::oci::image::ManifestList;
 
 #[derive(Debug)]
 enum Context<'a> {
@@ -58,7 +58,9 @@ pub trait Registry {
 
 pub struct OciRegistry {
     // TODO cleanup this type. Cannot use Box<dyn ...> because of generic arguments in a method
-    downloader: DecompressDownloader<VerifyingDownloader<CachingDownloader<VerifyingDownloader<ReqwestDownloader>>>>,
+    downloader: DecompressDownloader<
+        VerifyingDownloader<CachingDownloader<VerifyingDownloader<ReqwestDownloader>>>,
+    >,
 }
 
 impl Default for OciRegistry {
@@ -76,9 +78,7 @@ impl Default for OciRegistry {
                 },
             },
         };
-        OciRegistry {
-            downloader,
-        }
+        OciRegistry { downloader }
     }
 }
 

@@ -8,8 +8,9 @@ use config::RuntimeConfig;
 use structopt::StructOpt;
 
 use crate::image::manager::ImageManager;
+use crate::oci::runtime::{OciCliRuntime, Runtime};
+use crate::runtime::generator::{RunGenerator, RuntimeBundleGenerator};
 mod config;
-mod runtime;
 mod container;
 mod dirs;
 mod image;
@@ -17,6 +18,7 @@ mod init;
 mod logger;
 mod metadata;
 mod oci;
+mod runtime;
 
 #[derive(StructOpt, Debug)]
 #[structopt(about = "Tools to allow separate containers to call each other")]
@@ -64,18 +66,20 @@ enum Command {
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::from_args();
-    logger::init(cli.verbosity.log_level());
+    logger::init(cli.verbosity.log_level()).context("could not initialize logger")?;
     match cli.command {
-        Command::Init { cmd, args } => {
-            log::debug!("command: init. cmd: {} args: {:#?}", cmd, args);
-            init::spawn(cmd, args)?
-        }
+        Command::Init { cmd, args } => init::spawn(cmd, args)?,
         Command::Run { alias, args } => {
-            log::debug!("command: run. alias: {} args: {:#?}", alias, args);
-
             let dir = current_dir().unwrap();
             // config.validate()?;
             let config = config::from_dir(&dir).unwrap();
+            let container = config.get_container_by_alias(&alias)?;
+
+            let runtime_generator = RunGenerator::default();
+            let runtime_bundle = runtime_generator.build(container).await?;
+
+            let runtime = RunGenerator::default();
+            let path= runtime.build(container).await?;
             todo!();
             // let runtime = CommandRuntime::new("runc");
 
@@ -90,7 +94,6 @@ async fn main() -> Result<()> {
             // manager.run(&alias, args).await?
         }
         Command::Exec { file, args } => {
-            log::debug!("command: exec. file: {:#?}", file);
             let file = OpenOptions::new().read(true).write(true).open(file)?;
 
             let lines = BufReader::new(file)
@@ -108,14 +111,13 @@ async fn main() -> Result<()> {
                 .get_container_by_name(&config.container_name)
                 .unwrap();
 
-            let runtime = container::Runtime::new();
+
             todo!();
             // runtime
             //     .run_container(&container.image, &container.cmd, &Some(args), &None, &None)
             //     .await?
         }
         Command::Inject {} => {
-            log::debug!("command: inject.");
             let dir = current_dir().unwrap();
             let config = config::from_dir(&dir).unwrap();
             let mut image_manager = ImageManager::default();

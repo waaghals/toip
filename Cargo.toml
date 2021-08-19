@@ -33,6 +33,7 @@ thiserror = "1.0.26"
 directories = "3.0"
 # atty = "0.2.14"
 tar = "0.4.37"
+oci_spec = { git = "https://github.com/containers/oci-spec-rs", rev = "e0de21b89dc1e65f69a5f45a08bbe426787c7fa1"}
 # shellexpand = "2.0.0"
 # walkdir = "2.3.1"
 

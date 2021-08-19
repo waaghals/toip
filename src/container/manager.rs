@@ -8,12 +8,11 @@ use std::path::PathBuf;
 use anyhow::{anyhow, Context, Result};
 
 use crate::config::{Config, Container, RuntimeConfig};
-use crate::container::Runtime;
 
 pub struct Manager {
     pub workdir: PathBuf,
     pub config: Config,
-    pub runtime: Runtime,
+    // pub runtime: Runtime,
 }
 
 impl Manager {
@@ -69,47 +68,43 @@ impl Manager {
     }
 
     pub async fn run(&self, alias: &str, args: Vec<&str>) -> Result<()> {
-        match self.config.get_container_by_alias(alias) {
-            Some(container) => {
-                let (name, container) = container?;
+        let container = self.config.get_container_by_alias(alias)?;
 
-                let mut binaries_path = self.workdir.clone();
-                binaries_path.push(".doe");
-                binaries_path.push(name);
+        let mut binaries_path = self.workdir.clone();
+        binaries_path.push(".doe");
+        binaries_path.push(alias);
 
-                self.generate_scripts(&binaries_path, container)?;
-                self.add_current_exe(&binaries_path)?;
-                let mut mounts: HashMap<String, String> =
-                    container.volumes.clone().map_or(HashMap::new(), |f| f);
+        self.generate_scripts(&binaries_path, container)?;
+        self.add_current_exe(&binaries_path)?;
+        let mut mounts: HashMap<String, String> =
+            container.volumes.clone().map_or(HashMap::new(), |f| f);
 
-                let path = binaries_path.to_str().unwrap();
-                mounts.insert("/usr/bin/doe".to_string(), path.to_string());
-                mounts.insert(
-                    "/var/run/docker.sock".to_string(),
-                    "/var/run/docker.sock".to_string(),
-                );
+        let path = binaries_path.to_str().unwrap();
+        mounts.insert("/usr/bin/doe".to_string(), path.to_string());
+        mounts.insert(
+            "/var/run/docker.sock".to_string(),
+            "/var/run/docker.sock".to_string(),
+        );
 
-                let mut _args: Vec<String> = args.clone().iter().map(|s| s.to_string()).collect();
-                // let mut init_args = vec!["-vvv".to_string(),"init".to_string(), container.cmd.clone()];
-                // init_args.append(&mut args);
+        let mut _args: Vec<String> = args.clone().iter().map(|s| s.to_string()).collect();
+        // let mut init_args = vec!["-vvv".to_string(),"init".to_string(), container.cmd.clone()];
+        // init_args.append(&mut args);
 
-                self.runtime
-                    .run_container(
-                        &"".to_string(),
-                        // &container.image,
-                        // &"bash".to_string(),
-                        &String::from("bash"),
-                        &None,
-                        // &container.cmd,
-                        // &Some(args),
-                        // &"/usr/bin/doe/doe".to_string(),
-                        // &Some(init_args),
-                        &Some(mounts),
-                        &container.envvars,
-                    )
-                    .await
-            }
-            None => Err(anyhow!("No alias `{}` in config", alias)),
-        }
+        todo!();
+        // self.runtime
+        //     .run_container(
+        //         &"".to_string(),
+        //         // &container.image,
+        //         // &"bash".to_string(),
+        //         &String::from("bash"),
+        //         &None,
+        //         // &container.cmd,
+        //         // &Some(args),
+        //         // &"/usr/bin/doe/doe".to_string(),
+        //         // &Some(init_args),
+        //         &Some(mounts),
+        //         &container.envvars,
+        //     )
+        //     .await?
     }
 }
