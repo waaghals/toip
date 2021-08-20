@@ -1,5 +1,7 @@
 {
-  "aliases": {},
+  "aliases": {
+    "alpine": "alpine_container"
+  },
   "containers": {
     "alpine_container": {
       "image": "registry://quay.io/libpod/alpine@sha256:fa93b01658e3a5a1686dc3ae55f170d8de487006fb53a28efcd12ab0710a2e5f",

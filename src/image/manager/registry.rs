@@ -2,6 +2,7 @@ use std::io::Cursor;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
+use flate2::read::GzDecoder;
 use tar::Archive;
 
 use crate::config::RegistrySource;
@@ -63,8 +64,11 @@ impl RegistryManager {
                 .client
                 .layer(&source.registry, &source.repository, layer_descriptor)
                 .await?;
+
+            // TODO find out why tars need to be decoded here, while they cannot seem to be decoded during downloading
             let buffer = Cursor::new(blob);
-            let mut tar = Archive::new(buffer);
+            let decompressed = GzDecoder::new(buffer);
+            let mut tar = Archive::new(decompressed);
             let destination = self.destination(diff_id);
 
             tar.unpack(&destination).with_context(|| {

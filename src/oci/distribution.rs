@@ -399,9 +399,12 @@ where
         let mut response = self.inner.download(url, accept_headers, context).await?;
 
         if response.content_type.ends_with("+gzip") {
-            log::info!("decompressing `{}`", context);
-            let decoder = GzDecoder::new(&response.bytes[..]);
-            let decompressed = decoder.bytes().map(|byte| byte.unwrap()).collect();
+            // log::info!("decompressing `{}`", context);
+            let mut decoder = GzDecoder::new(&response.bytes[..]);
+            // let decompressed: Result<Vec<_>, _> = decoder.bytes(); //.collect();
+            
+            let mut decompressed: Vec<u8> = Vec::new();
+            decoder.read_to_end(&mut decompressed)?;
             response.bytes = decompressed;
         }
 

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::env::current_exe;
-use std::fs::{create_dir_all, hard_link, metadata, File};
+use std::fs::{self, File, create_dir_all, hard_link, metadata};
 use std::io::prelude::*;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
@@ -41,6 +41,7 @@ impl Manager {
             .with_context(|| format!("Could not read metadata for file {:?}", &path))?
             .permissions();
         perms.set_mode(0o777); //TODO change mode
+
         Ok(())
     }
 

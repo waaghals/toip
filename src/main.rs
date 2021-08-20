@@ -80,6 +80,7 @@ async fn main() -> Result<()> {
 
             let runtime = RunGenerator::default();
             let path= runtime.build(container).await?;
+            println!("{:?}", path);
             todo!();
             // let runtime = CommandRuntime::new("runc");
 
