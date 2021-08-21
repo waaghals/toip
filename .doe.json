@@ -1,14 +1,29 @@
 {
   "aliases": {
-    "alpine": "alpine_container"
+    "alpine": "alpine_container",
+    "cowsay": "cowsay_quay"
   },
   "containers": {
     "alpine_container": {
-      "image": "registry://quay.io/libpod/alpine@sha256:fa93b01658e3a5a1686dc3ae55f170d8de487006fb53a28efcd12ab0710a2e5f",
-      "cmd": "sh",
+      "image": "registry://quay.io./libpod/alpine@sha256:fa93b01658e3a5a1686dc3ae55f170d8de487006fb53a28efcd12ab0710a2e5f",
+      "cmd": ["sh"],
       "links": {
-        "cowsay": "cowsay_container",
+        "cowsay": "cowsay_quay",
         "composer": "composer_container"
+      }
+    },
+    "cowsay_docker": {
+      "image": "registry://rancher/cowsay",
+      "cmd": ["cowsay"],
+      "env": {
+        "COWSAY_ANIMAL": "tux"
+      }
+    },
+    "cowsay_quay": {
+      "image": "registry://quay.io/paper/cowsay:latest",
+      "cmd": ["cowsay"],
+      "env": {
+        "COWSAY_ANIMAL": "tux"
       }
     }
   }

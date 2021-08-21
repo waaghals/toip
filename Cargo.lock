@@ -330,6 +330,7 @@ dependencies = [
  "log",
  "nix",
  "oci_spec",
+ "rand",
  "regex",
  "reqwest",
  "serde",

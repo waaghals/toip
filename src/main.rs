@@ -1,10 +1,12 @@
 use std::env::current_dir;
-use std::fs::OpenOptions;
+use std::fs::{OpenOptions, remove_dir_all};
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use config::RuntimeConfig;
+use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
 use structopt::StructOpt;
 
 use crate::image::manager::ImageManager;
@@ -75,13 +77,20 @@ async fn main() -> Result<()> {
             let config = config::from_dir(&dir).unwrap();
             let container = config.get_container_by_alias(&alias)?;
 
-            let runtime_generator = RunGenerator::default();
-            let runtime_bundle = runtime_generator.build(container).await?;
+            let container_id: String = thread_rng()
+                .sample_iter(&Alphanumeric)
+                .take(30)
+                .map(char::from)
+                .collect();
+            log::info!("running container `{}`", container_id);
 
-            let runtime = RunGenerator::default();
-            let path= runtime.build(container).await?;
-            println!("{:?}", path);
-            todo!();
+            let runtime_generator = RunGenerator::default();
+            let bundle_path = runtime_generator.build(&container_id, container, args).await?;
+
+            let runtime = OciCliRuntime::default();
+            runtime.run(&container_id, &bundle_path)?;
+            remove_dir_all(bundle_path)?;
+
             // let runtime = CommandRuntime::new("runc");
 
             // let runtime = container::Runtime::new();
@@ -111,7 +120,6 @@ async fn main() -> Result<()> {
                 .config
                 .get_container_by_name(&config.container_name)
                 .unwrap();
-
 
             todo!();
             // runtime

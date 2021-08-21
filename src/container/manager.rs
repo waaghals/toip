@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use anyhow::{anyhow, Context, Result};
 
-use crate::config::{Config, Container, RuntimeConfig};
+use crate::config::{Config, ContainerConfig, RuntimeConfig};
 
 pub struct Manager {
     pub workdir: PathBuf,
@@ -45,7 +45,7 @@ impl Manager {
         Ok(())
     }
 
-    fn generate_scripts(&self, binaries_path: &PathBuf, container: &Container) -> Result<()> {
+    fn generate_scripts(&self, binaries_path: &PathBuf, container: &ContainerConfig) -> Result<()> {
         if let Some(links) = container.links.clone() {
             for (name, container) in links {
                 log::debug!(

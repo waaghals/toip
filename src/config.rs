@@ -14,7 +14,7 @@ use thiserror::Error;
 
 use crate::oci::image::Reference;
 
-const REGISTRY_PATTERN: &str = r"^(?:(?P<registry>[a-zA-Z0-9][a-zA-Z0-9.]+?)/)?(?P<repository>[a-z0-9][a-z0-9._-]*(?:/[a-z0-9][a-z0-9._-]*)?)(?:(?::(?P<tag>[a-zA-Z0-9_][a-zA-Z0-9._-]+))|@(?P<digest>[a-zA-Z0-9]+:[a-zA-Z0-9]+))?$";
+const REGISTRY_PATTERN: &str = r"^(?:(?P<registry>(?:[a-zA-Z0-9]+\.[a-zA-Z0-9.]+?)|[a-zA-Z0-9]+\.)/)?(?P<repository>[a-z0-9][a-z0-9._-]*(?:/[a-z0-9][a-z0-9._-]*)?)(?:(?::(?P<tag>[a-zA-Z0-9_][a-zA-Z0-9._-]+))|@(?P<digest>[a-zA-Z0-9]+:[a-zA-Z0-9]+))?$";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RegistrySource {
@@ -69,6 +69,7 @@ pub enum ImageSource {
     Build(BuildSource),
 }
 
+
 impl TryFrom<&str> for RegistrySource {
     type Error = ParseImageError;
 
@@ -81,7 +82,7 @@ impl TryFrom<&str> for RegistrySource {
 
         let registry = match captures.name("registry") {
             Some(registry_match) => registry_match.as_str(),
-            None => "docker.io",
+            None => "registry-1.docker.io",
         };
         let reference = match captures.name("digest") {
             Some(digest_match) => {
@@ -196,28 +197,18 @@ impl Serialize for ImageSource {
 }
 
 #[derive(Debug, DeriveDeserialize, DeriveSerialize, Clone)]
-pub struct Container {
+pub struct ContainerConfig {
     pub image: ImageSource,
     pub links: Option<HashMap<String, String>>,
-    pub cmd: String,
-    pub args: Option<Vec<String>>,
+    pub entrypoint: Option<Vec<String>>,
+    pub cmd: Option<Vec<String>>,
     pub volumes: Option<HashMap<String, String>>,
     pub envvars: Option<HashMap<String, String>>,
 }
 
-struct MissingContainerForLink {
-    container: String,
-    link: String,
-}
-
-struct MissingContainerForAlias {
-    container: String,
-    alias: String,
-}
-
 #[derive(Debug, DeriveDeserialize, DeriveSerialize, Clone)]
 pub struct Config {
-    containers: HashMap<String, Container>,
+    containers: HashMap<String, ContainerConfig>,
     aliases: HashMap<String, String>,
 }
 
@@ -237,7 +228,7 @@ pub enum ContainerError {
 }
 
 impl Config {
-    pub fn get_container_by_alias(&self, alias: &str) -> Result<&Container, ContainerError> {
+    pub fn get_container_by_alias(&self, alias: &str) -> Result<&ContainerConfig, ContainerError> {
         match self.aliases.get(alias) {
             Some(name) => match self.containers.get(name) {
                 Some(container) => Ok(container),
@@ -252,11 +243,11 @@ impl Config {
         }
     }
 
-    pub fn containers(&self) -> Values<String, Container> {
+    pub fn containers(&self) -> Values<String, ContainerConfig> {
         self.containers.values()
     }
 
-    pub fn get_container_by_name(&self, name: &String) -> Option<&Container> {
+    pub fn get_container_by_name(&self, name: &String) -> Option<&ContainerConfig> {
         self.containers.get(name)
     }
 

@@ -29,10 +29,10 @@ impl Default for ImageManager {
 
 impl ImageManager {
     pub async fn prepare(&mut self, source: &ImageSource) -> Result<Image> {
-        log::info!("Preparing image `{:?}`", source);
+        log::info!("preparing image `{}`", source);
         match source {
             ImageSource::Registry(source) => {
-                if let None = self.registry {
+                if self.registry.is_none() {
                     self.registry = Some(RegistryManager::default());
                 }
 
@@ -41,7 +41,7 @@ impl ImageManager {
                 Ok(image)
             }
             ImageSource::Path(source) => {
-                if let None = self.path {
+                if self.path.is_none() {
                     self.path = Some(PathManager::default());
                 }
 
@@ -50,7 +50,7 @@ impl ImageManager {
                 Ok(image)
             }
             ImageSource::Build(source) => {
-                if let None = self.build {
+                if self.build.is_none() {
                     self.build = Some(BuildManager::default());
                 }
 

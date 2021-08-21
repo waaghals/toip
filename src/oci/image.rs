@@ -10,7 +10,7 @@ use std::env::consts::{ARCH as CURRENT_ARCHITECTURE, OS as CURRENT_OS};
 use std::fmt;
 use thiserror::Error;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Image {
     #[serde(rename = "architecture")]
     pub architecture: Architecture,
@@ -33,7 +33,7 @@ pub struct Image {
     pub rootfs: Rootfs,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Config {
     #[serde(rename = "Cmd")]
     pub cmd: Option<Vec<String>>,
@@ -81,7 +81,7 @@ pub struct Config {
 //     pub empty_layer: Option<bool>,
 // }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Rootfs {
     #[serde(rename = "diff_ids")]
     pub diff_ids: Vec<Digest>,
@@ -90,7 +90,7 @@ pub struct Rootfs {
     pub fs_type: Type,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Type {
     #[serde(rename = "layers")]
     Layers,

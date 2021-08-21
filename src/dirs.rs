@@ -18,6 +18,17 @@ where
     directory
 }
 
+fn data_dir<P>(sub_directory: P) -> PathBuf
+where
+    P: AsRef<Path>,
+{
+    let project_directories = project_directories();
+    let data_directory = project_directories.data_dir();
+    let mut directory: PathBuf = data_directory.into();
+    directory.push(sub_directory);
+    directory
+}
+
 pub fn layer_dir() -> PathBuf {
     cache_dir("layers")
 }
@@ -28,4 +39,8 @@ pub fn blob_dir() -> PathBuf {
 
 pub fn container_dir() -> PathBuf {
     cache_dir("containers")
+}
+
+pub fn volume_dir() -> PathBuf {
+    data_dir("volumes")
 }
