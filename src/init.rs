@@ -45,7 +45,7 @@ fn convert_to_signal(v: u32) -> Result<Signal> {
         x if x == Signal::SIGPWR as i32 => Ok(Signal::SIGPWR),
         x if x == Signal::SIGSYS as i32 => Ok(Signal::SIGSYS),
         _ => Err(anyhow!(
-            "Could not convert signal {} to nix::sys::signal::Signal",
+            "could not convert signal {} to nix::sys::signal::Signal",
             v
         )),
     }
@@ -75,8 +75,8 @@ fn reap_zombies() -> Result<Vec<Pid>> {
 }
 
 fn handle_signals(pid: Pid, sfd: &mut SignalFd) -> Result<Vec<Pid>> {
-    let signal_option = sfd.read_signal().context("Could not read signal")?;
-    let signal_info = signal_option.ok_or_else(|| anyhow!("Received no signal"))?;
+    let signal_option = sfd.read_signal().context("could not read signal")?;
+    let signal_info = signal_option.ok_or_else(|| anyhow!("received no signal"))?;
     let signal = convert_to_signal(signal_info.ssi_signo)?;
     match signal {
         Signal::SIGCHLD => reap_zombies(),

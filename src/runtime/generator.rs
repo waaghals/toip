@@ -85,6 +85,7 @@ fn create_directories(directories: &[PathBuf]) -> Result<()> {
 }
 
 // TODO improve error handling here
+// TODO cleanup nesting
 fn resolve_user(image: Image) -> (Uid, Gid) {
     let root_user = Uid::from_raw(0);
     let root_group = Gid::from_raw(0);
@@ -252,10 +253,7 @@ fn build_mounts(
             destination: "/usr/bin/doe".into(),
             typ: Some("bind".into()),
             source: bin_dir.into(),
-            options: Some(vec![
-                "rbind".into(),
-                "rw".into(),
-            ]),
+            options: Some(vec!["rbind".into(), "rw".into()]),
         },
     ];
     mounts
@@ -472,19 +470,3 @@ impl Default for CallGenerator {
         CallGenerator {}
     }
 }
-
-// #[async_trait]
-// impl RuntimeBundleGenerator for CallGenerator {
-//     async fn build<S, A>(
-//         &self,
-//         container_name: S,
-//         config: &ContainerConfig,
-//         arguments: Vec<A>,
-//     ) -> Result<PathBuf>
-//     where
-//         S: Into<String> + Send,
-//         A: Into<String> + Send,
-//     {
-//         todo!()
-//     }
-// }

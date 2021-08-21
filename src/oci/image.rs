@@ -24,8 +24,6 @@ pub struct Image {
     #[serde(rename = "created")]
     pub created: Option<String>,
 
-    // #[serde(rename = "history")]
-    // pub history: Option<Vec<History>>,
     #[serde(rename = "os")]
     pub os: OperatingSystem,
 
@@ -62,24 +60,6 @@ pub struct Config {
     #[serde(rename = "WorkingDir")]
     pub working_dir: Option<String>,
 }
-
-// #[derive(Serialize, Deserialize, Debug)]
-// pub struct History {
-//     #[serde(rename = "author")]
-//     pub author: Option<String>,
-
-//     #[serde(rename = "comment")]
-//     pub comment: Option<String>,
-
-//     #[serde(rename = "created")]
-//     pub created: Option<String>,
-
-//     #[serde(rename = "created_by")]
-//     pub created_by: Option<String>,
-
-//     #[serde(rename = "empty_layer")]
-//     pub empty_layer: Option<bool>,
-// }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Rootfs {
@@ -317,8 +297,6 @@ pub struct Descriptor {
 
     #[serde(rename = "size")]
     pub size: u64,
-    // #[serde(rename = "annotations")]
-    // pub annotations: Option<HashMap<String, String>>,
 }
 
 impl fmt::Display for Descriptor {

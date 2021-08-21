@@ -9,11 +9,9 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-# nom = "5"
 serde = "1.0.111"
 serde_derive = "1.0.111"
-bollard = "0.11"
-tokio = { version = "1.8.1", features = ["rt", "macros"] }
+tokio = { version = "1.8.1", features = ["full"] }
 reqwest = { version = "0.11.4", features = ["rustls-tls"] }
 termion = "1.5.6"
 futures-util = "0.3.15"
@@ -32,7 +30,6 @@ flate2 = "1.0.20"
 thiserror = "1.0.26"
 directories = "3.0"
 rand = "0.8.4"
-# atty = "0.2.14"
 tar = "0.4.37"
 oci_spec = { git = "https://github.com/containers/oci-spec-rs", rev = "e0de21b89dc1e65f69a5f45a08bbe426787c7fa1"}
 # shellexpand = "2.0.0"

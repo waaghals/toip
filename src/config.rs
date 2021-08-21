@@ -76,7 +76,7 @@ impl TryFrom<&str> for RegistrySource {
         let regex = Regex::new(REGISTRY_PATTERN).unwrap();
         let captures = regex
             .captures(value)
-            .with_context(|| format!("Image reference `{}` could not be parsed.", value))
+            .with_context(|| format!("image reference `{}` could not be parsed.", value))
             .map_err(|_| ParseImageError::InvalidRegistry)?;
 
         let registry = match captures.name("registry") {
@@ -162,10 +162,10 @@ pub enum ParseImageError {
 impl fmt::Display for ParseImageError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ParseImageError::InvalidBuild => write!(f, "Invalid image build"),
-            ParseImageError::InvalidPath => write!(f, "Invalid image path"),
-            ParseImageError::InvalidRegistry => write!(f, "Invalid image registry"),
-            ParseImageError::UnknownScheme => write!(f, "Unknown image scheme"),
+            ParseImageError::InvalidBuild => write!(f, "invalid image build"),
+            ParseImageError::InvalidPath => write!(f, "invalid image path"),
+            ParseImageError::InvalidRegistry => write!(f, "invalid image registry"),
+            ParseImageError::UnknownScheme => write!(f, "unknown image scheme"),
         }
     }
 }
@@ -252,15 +252,15 @@ impl Config {
 
 pub fn from_file(file_name: &Path) -> Result<Config> {
     let file = File::open(file_name)
-        .with_context(|| format!("Config file `{:?}` not found.", file_name))?;
+        .with_context(|| format!("config file `{:?}` not found.", file_name))?;
     let mut buf_reader = BufReader::new(file);
     let mut contents = String::new();
     buf_reader
         .read_to_string(&mut contents)
-        .with_context(|| format!("Unable to read config file `{:?}`.", file_name))?;
+        .with_context(|| format!("unable to read config file `{:?}`.", file_name))?;
 
     serde_json::from_str(&contents)
-        .with_context(|| format!("Unable to parse config file `{:?}`.", file_name))
+        .with_context(|| format!("unable to parse config file `{:?}`.", file_name))
 }
 
 pub fn from_dir(dir: &Path) -> Result<Config> {
