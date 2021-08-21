@@ -3,9 +3,7 @@ use anyhow::Result;
 use crate::config::PathSource;
 use crate::oci::image::Image;
 
-pub struct PathManager {
-
-}
+pub struct PathManager {}
 
 impl Default for PathManager {
     fn default() -> Self {
@@ -14,7 +12,7 @@ impl Default for PathManager {
 }
 
 impl PathManager {
-    pub async fn convert(&self, source: &PathSource) -> Result<Image> {
+    pub async fn convert(&self, _source: &PathSource) -> Result<Image> {
         todo!()
     }
 }

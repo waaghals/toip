@@ -1,6 +1,6 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use log::Level;
-use simplelog::{ColorChoice, Config, ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
+use simplelog::{ColorChoice, ConfigBuilder, LevelFilter, TermLogger, TerminalMode};
 
 fn level_filter(level: Option<Level>) -> LevelFilter {
     match level {

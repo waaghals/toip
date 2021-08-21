@@ -402,7 +402,7 @@ where
             // log::info!("decompressing `{}`", context);
             let mut decoder = GzDecoder::new(&response.bytes[..]);
             // let decompressed: Result<Vec<_>, _> = decoder.bytes(); //.collect();
-            
+
             let mut decompressed: Vec<u8> = Vec::new();
             decoder.read_to_end(&mut decompressed)?;
             response.bytes = decompressed;

@@ -23,10 +23,15 @@
         "image": "registry://bash:latest",
         "cmd": ["bash"],
         "links": {
-          "cowsay": "cowsay_container"
+          "cowsay": "cowsay_container",
+          "tuxsay": "tuxsay_container"
         }
       },
       "cowsay_container": {
+        "image": "registry://cowsay",
+        "cmd": ["cowsay"]
+      },
+      "tuxsay_container": {
         "image": "registry://cowsay",
         "cmd": ["cowsay"],
         "env": {

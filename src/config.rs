@@ -1,12 +1,12 @@
-use std::collections::hash_map::{Keys, Values};
+use std::collections::hash_map::Values;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::fs::File;
 use std::io::{BufReader, Read};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::{error, fmt};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use regex::Regex;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use serde_derive::{Deserialize as DeriveDeserialize, Serialize as DeriveSerialize};
@@ -69,7 +69,6 @@ pub enum ImageSource {
     Build(BuildSource),
 }
 
-
 impl TryFrom<&str> for RegistrySource {
     type Error = ParseImageError;
 
@@ -127,16 +126,13 @@ impl TryFrom<&str> for ImageSource {
     type Error = ParseImageError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        if value.starts_with("registry://") {
-            let part = &value[11..];
+        if let Some(part) = value.strip_prefix("registry://") {
             let registry = part.try_into()?;
             Ok(ImageSource::Registry(registry))
-        } else if value.starts_with("build://") {
-            let part = &value[8..];
+        } else if let Some(part) = value.strip_prefix("build://") {
             let config = part.try_into()?;
             Ok(ImageSource::Build(config))
-        } else if value.starts_with("path://") {
-            let part = &value[7..];
+        } else if let Some(part) = value.strip_prefix("path://") {
             let config = part.try_into()?;
             Ok(ImageSource::Path(config))
         } else {
@@ -203,12 +199,14 @@ pub struct ContainerConfig {
     pub entrypoint: Option<Vec<String>>,
     pub cmd: Option<Vec<String>>,
     pub volumes: Option<HashMap<String, String>>,
-    pub envvars: Option<HashMap<String, String>>,
+    pub env: Option<HashMap<String, String>>,
+    pub inherit_envvars: Option<Vec<String>>,
 }
 
 #[derive(Debug, DeriveDeserialize, DeriveSerialize, Clone)]
 pub struct Config {
     containers: HashMap<String, ContainerConfig>,
+    volumes: HashMap<String, String>,
     aliases: HashMap<String, String>,
 }
 
@@ -247,20 +245,12 @@ impl Config {
         self.containers.values()
     }
 
-    pub fn get_container_by_name(&self, name: &String) -> Option<&ContainerConfig> {
+    pub fn get_container_by_name(&self, name: &str) -> Option<&ContainerConfig> {
         self.containers.get(name)
-    }
-
-    pub fn available_aliases(&self) -> Keys<'_, String, String> {
-        self.aliases.keys()
-    }
-
-    pub fn validate<'a>(&self) -> Result<()> {
-        todo!()
     }
 }
 
-pub fn from_file(file_name: &PathBuf) -> Result<Config> {
+pub fn from_file(file_name: &Path) -> Result<Config> {
     let file = File::open(file_name)
         .with_context(|| format!("Config file `{:?}` not found.", file_name))?;
     let mut buf_reader = BufReader::new(file);
@@ -273,6 +263,6 @@ pub fn from_file(file_name: &PathBuf) -> Result<Config> {
         .with_context(|| format!("Unable to parse config file `{:?}`.", file_name))
 }
 
-pub fn from_dir(dir: &PathBuf) -> Result<Config> {
+pub fn from_dir(dir: &Path) -> Result<Config> {
     from_file(&dir.join(".doe.json"))
 }

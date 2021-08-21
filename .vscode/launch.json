@@ -23,6 +23,24 @@
             "args": ["run", "bash"],
             "cwd": "${workspaceFolder}"
         },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug 'doe run cowsay'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=doe",
+                    "--package=doe"
+                ],
+                "filter": {
+                    "name": "doe",
+                    "kind": "bin"
+                }
+            },
+            "args": ["-vvv", "run", "cowsay"],
+            "cwd": "${workspaceFolder}"
+        },
 
         {
             "type": "lldb",

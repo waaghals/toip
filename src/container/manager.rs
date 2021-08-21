@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 use std::env::current_exe;
-use std::fs::{self, File, create_dir_all, hard_link, metadata};
+use std::fs::{create_dir_all, hard_link, metadata, File};
 use std::io::prelude::*;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 
 use crate::config::{Config, ContainerConfig, RuntimeConfig};
 

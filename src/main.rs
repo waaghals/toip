@@ -1,5 +1,5 @@
 use std::env::current_dir;
-use std::fs::{OpenOptions, remove_dir_all};
+use std::fs::OpenOptions;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 
@@ -85,11 +85,13 @@ async fn main() -> Result<()> {
             log::info!("running container `{}`", container_id);
 
             let runtime_generator = RunGenerator::default();
-            let bundle_path = runtime_generator.build(&container_id, container, args).await?;
+            let bundle_path = runtime_generator
+                .build(&container_id, container, args)
+                .await?;
 
             let runtime = OciCliRuntime::default();
             runtime.run(&container_id, &bundle_path)?;
-            remove_dir_all(bundle_path)?;
+            // remove_dir_all(bundle_path)?;
 
             // let runtime = CommandRuntime::new("runc");
 
@@ -103,7 +105,7 @@ async fn main() -> Result<()> {
             // let args = args.iter().map(|a| a.as_str()).collect();
             // manager.run(&alias, args).await?
         }
-        Command::Exec { file, args } => {
+        Command::Exec { file, args: _ } => {
             let file = OpenOptions::new().read(true).write(true).open(file)?;
 
             let lines = BufReader::new(file)
@@ -116,7 +118,7 @@ async fn main() -> Result<()> {
             let config: RuntimeConfig =
                 serde_json::from_str(&lines).context("could not parse exec information")?;
 
-            let container = config
+            let _container = config
                 .config
                 .get_container_by_name(&config.container_name)
                 .unwrap();
