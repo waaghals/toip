@@ -1,0 +1,27 @@
+[aliases]
+sh = "alpine_container"
+cowsay = "cowsay_quay"
+
+[containers.alpine_container]
+image = "registry://quay.io/libpod/alpine@sha256:fa93b01658e3a5a1686dc3ae55f170d8de487006fb53a28efcd12ab0710a2e5f"
+cmd = ["sh"]
+[containers.alpine_container.links]
+cowsay = "cowsay_quay"
+tuxsay = "tuxsay_quay"
+
+[containers.cowsay_docker]
+image = "registry://rancher/cowsay"
+cmd = ["cowsay"]
+[containers.cowsay_docker.env]
+COWSAY_ANIMAL = "tux"
+[containers.cowsay_quay]
+image = "registry://quay.io/paper/cowsay:latest"
+cmd = ["cowsay"]
+
+[containers.tuxsay_quay]
+image = "registry://quay.io/paper/cowsay:latest"
+cmd = ["cowsay"]
+[containers.tuxsay_quay.env]
+COWSAY_ANIMAL = "tux"
+
+[volumes]

@@ -259,10 +259,10 @@ pub fn from_file(file_name: &Path) -> Result<Config> {
         .read_to_string(&mut contents)
         .with_context(|| format!("unable to read config file `{:?}`.", file_name))?;
 
-    serde_json::from_str(&contents)
+    toml::from_str(&contents)
         .with_context(|| format!("unable to parse config file `{:?}`.", file_name))
 }
 
 pub fn from_dir(dir: &Path) -> Result<Config> {
-    from_file(&dir.join(".doe.json"))
+    from_file(&dir.join(".doe.toml"))
 }
