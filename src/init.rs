@@ -1,17 +1,15 @@
+use std::fs::File;
+use std::os::unix::io::AsRawFd;
+use std::os::unix::process::CommandExt;
+use std::process::Command;
 
-use anyhow::anyhow;
-use anyhow::Context;
-use anyhow::Result;
+use anyhow::{anyhow, Context, Result};
 use nix::errno::Errno;
 use nix::libc::{pid_t, STDIN_FILENO};
 use nix::sys::signal::{kill, SigSet, Signal};
 use nix::sys::signalfd::SignalFd;
 use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
 use nix::unistd::{getpgrp, setpgid, tcsetpgrp, Pid};
-use std::fs::File;
-use std::os::unix::io::AsRawFd;
-use std::os::unix::process::CommandExt;
-use std::process::Command;
 
 fn convert_to_signal(v: u32) -> Result<Signal> {
     match v as i32 {
@@ -47,7 +45,7 @@ fn convert_to_signal(v: u32) -> Result<Signal> {
         x if x == Signal::SIGPWR as i32 => Ok(Signal::SIGPWR),
         x if x == Signal::SIGSYS as i32 => Ok(Signal::SIGSYS),
         _ => Err(anyhow!(
-            "Could not convert signal {} to nix::sys::signal::Signal",
+            "could not convert signal {} to nix::sys::signal::Signal",
             v
         )),
     }
@@ -63,10 +61,10 @@ fn reap_zombies() -> Result<Vec<Pid>> {
             }
             Ok(WaitStatus::StillAlive) => break,
 
-            status @ Ok(_) => log::error!("Received unknown status: `{:?}`", status),
+            status @ Ok(_) => log::error!("received unknown status: `{:?}`", status),
             Err(err) => {
                 return Err(anyhow!(
-                    "Received unexpected error while waiting for status: {}",
+                    "received unexpected error while waiting for status: {}",
                     err
                 ))
             }
@@ -77,8 +75,8 @@ fn reap_zombies() -> Result<Vec<Pid>> {
 }
 
 fn handle_signals(pid: Pid, sfd: &mut SignalFd) -> Result<Vec<Pid>> {
-    let signal_option = sfd.read_signal().context("Could not read signal")?;
-    let signal_info = signal_option.ok_or_else(|| anyhow!("Received no signal"))?;
+    let signal_option = sfd.read_signal().context("could not read signal")?;
+    let signal_info = signal_option.ok_or_else(|| anyhow!("received no signal"))?;
     let signal = convert_to_signal(signal_info.ssi_signo)?;
     match signal {
         Signal::SIGCHLD => reap_zombies(),
@@ -99,7 +97,7 @@ fn make_foreground() -> Result<()> {
     let tty = match File::open("/dev/tty") {
         Ok(tty) => tty.as_raw_fd(),
         Err(err) => {
-            log::debug!("Could not open /dev/tty: {}", err);
+            log::debug!("could not open /dev/tty: {}", err);
             STDIN_FILENO
         }
     };
@@ -115,16 +113,16 @@ fn make_foreground() -> Result<()> {
         Ok(_) => Ok(()),
 
         Err(Errno::ENOTTY) | Err(Errno::EBADF) => {
-            log::debug!("Setting foreground process failed because there is no tty present.");
+            log::debug!("setting foreground process failed because there is no tty present.");
             Ok(())
         }
         Err(Errno::ENXIO) => {
-            log::debug!("Setting foreground process failed because there is no such device.");
+            log::debug!("setting foreground process failed because there is no such device.");
             Ok(())
         }
 
         Err(err) => Err(anyhow!(
-            "Error while bringing process to foreground: {}",
+            "error while bringing process to foreground: {}",
             err
         )),
     }
@@ -138,7 +136,7 @@ pub fn spawn(cmd: String, args: Vec<String>) -> Result<()> {
     sigmask.thread_block().expect("could not block all signals");
     let mut sfd = SignalFd::new(&sigmask).expect("could not create signalfd for all signals");
 
-    log::debug!("Spawning cmd `{}` with arguments `{:#?}`", cmd, args);
+    log::debug!("spawning cmd `{}` with arguments `{:#?}`", cmd, args);
     let child = unsafe {
         Command::new(&cmd).args(&args).pre_exec(move || {
             make_foreground().unwrap();
@@ -147,10 +145,10 @@ pub fn spawn(cmd: String, args: Vec<String>) -> Result<()> {
         })
     }
     .spawn()
-    .with_context(|| format!("Could not spawn child `{}`", cmd))?;
+    .with_context(|| format!("could not spawn child `{}`", cmd))?;
 
     let pid = Pid::from_raw(child.id() as pid_t);
-    log::info!("Spawned child process `{}`", pid);
+    log::info!("spawned child process `{}`", pid);
 
     loop {
         match handle_signals(pid, &mut sfd) {

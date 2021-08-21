@@ -1,15 +1,25 @@
-use anyhow::{Context, Result};
-use std::env::current_dir;
-use std::io::{BufRead, BufReader, Write};
+use std::env;
+use std::fs::{self, OpenOptions};
+use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use std::{fs, fs::File, fs::OpenOptions};
+
+use anyhow::{Context, Result};
+use config::RuntimeConfig;
+use rand::distributions::Alphanumeric;
+use rand::{self, Rng};
 use structopt::StructOpt;
 
-use config::RuntimeConfig;
+use crate::image::manager::ImageManager;
+use crate::oci::runtime::{OciCliRuntime, Runtime};
+use crate::runtime::generator::{RunGenerator, RuntimeBundleGenerator};
 mod config;
-mod container;
+mod dirs;
+mod image;
 mod init;
 mod logger;
+mod metadata;
+mod oci;
+mod runtime;
 
 #[derive(StructOpt, Debug)]
 #[structopt(about = "Tools to allow separate containers to call each other")]
@@ -57,31 +67,37 @@ enum Command {
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::from_args();
-    logger::init(cli.verbosity.log_level());
+    logger::init(cli.verbosity.log_level()).context("could not initialize logger")?;
     match cli.command {
-        Command::Init { cmd, args } => {
-            log::debug!("Command: init. cmd: {} args: {:#?}", cmd, args);
-            init::spawn(cmd, args)?
-        }
+        Command::Init { cmd, args } => init::spawn(cmd, args)?,
         Command::Run { alias, args } => {
-            log::debug!("Command: run. alias: {} args: {:#?}", alias, args);
-
-            let dir = current_dir().unwrap();
+            let dir = env::current_dir().unwrap();
             // config.validate()?;
             let config = config::from_dir(&dir).unwrap();
+            let container = config.get_container_by_alias(&alias)?;
 
-            let runtime = container::Runtime::new();
-            let manager = container::Manager {
-                workdir: dir,
-                config: config,
-                runtime: runtime,
-            };
+            let container_id: String = rand::thread_rng()
+                .sample_iter(&Alphanumeric)
+                .take(30)
+                .map(char::from)
+                .collect();
+            log::info!("running container `{}`", container_id);
 
-            let args = args.iter().map(|a| a.as_str()).collect();
-            manager.run(&alias, args).await?
+            let runtime_generator = RunGenerator::default();
+            let bundle_path = runtime_generator
+                .build(&container_id, container, args)
+                .await?;
+
+            let runtime = OciCliRuntime::default();
+            runtime.run(&container_id, &bundle_path)?;
+            fs::remove_dir_all(&bundle_path).with_context(|| {
+                format!(
+                    "could not remove directory `{}`",
+                    bundle_path.to_str().unwrap()
+                )
+            })?;
         }
-        Command::Exec { file , args} => {
-            log::debug!("Command: exec. file: {:#?}", file);
+        Command::Exec { file, args: _ } => {
             let file = OpenOptions::new().read(true).write(true).open(file)?;
 
             let lines = BufReader::new(file)
@@ -91,15 +107,23 @@ async fn main() -> Result<()> {
                 .collect::<Vec<String>>()
                 .join("\n");
 
-            let config: RuntimeConfig = serde_json::from_str(&lines).with_context(|| format!("Could not parse exec information"))?;
+            let config: RuntimeConfig =
+                serde_json::from_str(&lines).context("could not parse exec information")?;
 
-            let container = config.config.get_container_by_name(&config.container_name).unwrap();
+            let _container = config
+                .config
+                .get_container_by_name(&config.container_name)
+                .unwrap();
 
-            let runtime = container::Runtime::new();
-            runtime.run_container(&container.image, &container.cmd, &Some(args), &None, &None).await?
+            todo!();
         }
         Command::Inject {} => {
-            log::debug!("Command: inject.");
+            let dir = env::current_dir().unwrap();
+            let config = config::from_dir(&dir).unwrap();
+            let mut image_manager = ImageManager::default();
+            for container in config.containers() {
+                image_manager.prepare(&container.image).await?;
+            }
         }
     }
 
@@ -108,23 +132,6 @@ async fn main() -> Result<()> {
     //TODO https://github.com/riboseinc/riffol
     //TODO https://crates.io/crates/atty
     //TODO https://github.com/cyphar/initrs/blob/master/src/main.rs
-
-    // match config.get_container_by_alias(&command) {
-    //     Some(container) => {
-    //         println!("{:#?}", container)
-    //     },
-    //     None => {
-    //         println!("No such container. \nOnly available containers:\n{:#?}", config.available_aliases());
-    //         return Ok(());
-    //     }
-    // }
-
-    // match run_container().await {
-    //     Ok(_) => println!("done"),
-    //     Err(err) => println!("{:#?}", err),
-    // };
-
-    // return Ok(());
 }
 
 // https://www.joshmcguigan.com/blog/build-your-own-shell-rust/
