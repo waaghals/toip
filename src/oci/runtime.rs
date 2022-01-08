@@ -1,18 +1,27 @@
-use anyhow::{Context, Result};
+use std::ffi::OsStr;
 use std::fmt;
-use std::{
-    ffi::OsStr,
-    fmt::Display,
-    process::{Command, Stdio},
-};
+use std::fmt::Display;
+use std::process::{Command, Stdio};
 
+use anyhow::{Context, Result};
 pub trait Runtime {
-    fn run<C, B>(&self, container_id: C, bundle: B) -> Result<()>
+    fn run<C, B, I, O, E>(
+        &self,
+        container_id: C,
+        bundle: B,
+        stdin: I,
+        stdout: O,
+        stderr: E,
+    ) -> Result<()>
     where
         B: AsRef<OsStr> + fmt::Debug,
-        C: AsRef<OsStr> + fmt::Debug;
+        C: AsRef<OsStr> + fmt::Debug,
+        I: Into<Stdio>,
+        O: Into<Stdio>,
+        E: Into<Stdio>;
 }
 
+#[derive(Debug, Clone)]
 pub struct OciCliRuntime<S>
 where
     S: AsRef<OsStr> + Display,
@@ -33,43 +42,56 @@ where
     pub fn new(program: S) -> Self {
         OciCliRuntime { program }
     }
-
-    fn exec<C, A>(&self, command: &'static str, container_id: &C, bundle: Option<&A>) -> Result<()>
-    where
-        C: AsRef<OsStr> + fmt::Debug,
-        A: AsRef<OsStr>,
-    {
-        let mut child = Command::new(&self.program);
-        child
-            .arg(command)
-            .arg(container_id)
-            .stdin(Stdio::inherit())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit());
-
-        if let Some(bundle) = bundle {
-            child.arg("--bundle");
-            child.arg(bundle);
-        }
-
-        child
-            .output()
-            .with_context(|| format!("could not spawn process `{:?}`", child))?;
-
-        Ok(())
-    }
 }
 
 impl<S> Runtime for OciCliRuntime<S>
 where
     S: AsRef<OsStr> + Display,
 {
-    fn run<C, B>(&self, container_id: C, bundle: B) -> Result<()>
+    fn run<C, B, I, O, E>(
+        &self,
+        container_id: C,
+        bundle: B,
+        stdin: I,
+        stdout: O,
+        stderr: E,
+    ) -> Result<()>
     where
-        C: AsRef<OsStr> + fmt::Debug,
         B: AsRef<OsStr> + fmt::Debug,
+        C: AsRef<OsStr> + fmt::Debug,
+        I: Into<Stdio>,
+        O: Into<Stdio>,
+        E: Into<Stdio>,
     {
-        self.exec("run", &container_id, Some(&bundle))
+        let mut child = Command::new(&self.program);
+        child
+            .arg("run")
+            .arg(&container_id)
+            .stdin(stdin)
+            .stdout(stdout)
+            .stderr(stderr);
+
+        // if let Some(bundle) = bundle {
+        child.arg("--bundle");
+        child.arg(&bundle);
+        // }
+
+        let mut spawned = child
+            .spawn()
+            .with_context(|| format!("could not spawn process `{:?}`", child))?;
+        let pid = spawned.id();
+        log::info!(
+            "spawned process with `{} run {:?} --bundle {:?}` with pid `{}`",
+            self.program,
+            container_id,
+            bundle,
+            pid
+        );
+
+        let status = spawned.wait()?;
+        log::info!("processes `{}` exited with status {:?}", pid, status);
+
+        Ok(())
     }
 }
 

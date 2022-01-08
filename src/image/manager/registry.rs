@@ -6,30 +6,24 @@ use flate2::read::GzDecoder;
 use tar::Archive;
 
 use crate::config::RegistrySource;
-use crate::dirs::layer_dir;
+use crate::dirs::layers_dir;
 use crate::oci::distribution::{OciRegistry, Registry};
 use crate::oci::image::{Digest, Image};
 
 pub struct RegistryManager {
-    layer_dir: PathBuf,
+    layers_dir: PathBuf,
     client: OciRegistry,
 }
 
-impl Default for RegistryManager {
-    fn default() -> Self {
-        let client = OciRegistry::default();
-        let layer_dir = layer_dir();
-        RegistryManager::new(client, layer_dir)
-    }
-}
-
 impl RegistryManager {
-    pub fn new(client: OciRegistry, layer_dir: PathBuf) -> Self {
-        RegistryManager { client, layer_dir }
+    pub fn new() -> Result<Self> {
+        let client = OciRegistry::new().context("could not construct `OciRegistry`")?;
+        let layers_dir = layers_dir()?;
+        Ok(RegistryManager { client, layers_dir })
     }
 
     fn destination(&self, digest: &Digest) -> PathBuf {
-        let mut path = self.layer_dir.clone();
+        let mut path = self.layers_dir.clone();
         path.push(&digest.algorithm.to_string());
         path.push(&digest.encoded.to_string());
         path
@@ -41,6 +35,7 @@ impl RegistryManager {
     }
 
     pub async fn pull(&self, source: &RegistrySource) -> Result<Image> {
+        log::debug!("Downloading manifest");
         let manifest = self
             .client
             .manifest(&source.registry, &source.repository, &source.reference)

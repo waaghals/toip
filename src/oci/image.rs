@@ -1,13 +1,14 @@
+use std::collections::HashMap;
+use std::convert::TryFrom;
+use std::env::consts::{ARCH as CURRENT_ARCHITECTURE, OS as CURRENT_OS};
+use std::fmt;
+
 use anyhow::Result;
 use regex::Regex;
 use serde::de;
 use serde::de::{Deserialize, Deserializer};
 use serde::ser::{Serialize, Serializer};
 use serde_derive::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::convert::TryFrom;
-use std::env::consts::{ARCH as CURRENT_ARCHITECTURE, OS as CURRENT_OS};
-use std::fmt;
 use thiserror::Error;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

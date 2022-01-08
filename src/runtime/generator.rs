@@ -5,40 +5,62 @@ use std::io::Write;
 use std::os::unix::prelude::PermissionsExt;
 use std::path::{Path, PathBuf};
 
-use crate::dirs::container_dir;
-use crate::image::manager::ImageManager;
-use crate::oci::image::Image;
-use crate::{config::ContainerConfig, dirs::layer_dir};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use nix::unistd::{self, Gid, Group, Uid, User};
 use oci_spec::{
-    Linux, LinuxIdMapping, LinuxNamespace, LinuxNamespaceType, Mount, Process, Root, Spec,
+    Linux,
+    LinuxIdMapping,
+    LinuxNamespace,
+    LinuxNamespaceType,
+    Mount,
+    Process,
+    Root,
+    Spec,
 };
 
-const BIN_DIR: &str = "/usr/bin/doe";
+use crate::config::ContainerConfig;
+use crate::dirs::{containers_dir, layers_dir};
+use crate::image::manager::ImageManager;
+use crate::metadata::APPLICATION_NAME;
+use crate::oci::image::Image;
+
+fn container_bin_dir() -> String {
+    format!("/usr/bin/{}", APPLICATION_NAME)
+}
+
+fn container_binary() -> String {
+    format!("{}/{}", container_bin_dir(), APPLICATION_NAME)
+}
+
+fn container_socket() -> String {
+    format!("/run/{}/sock", APPLICATION_NAME)
+}
 
 #[async_trait]
 pub trait RuntimeBundleGenerator {
-    async fn build<S, I>(
+    async fn build<C, A, S>(
         &self,
-        container_id: S,
+        container_id: C,
         config: &ContainerConfig,
-        arguments: I,
+        arguments: A,
+        socket_path: S,
     ) -> Result<PathBuf>
     where
-        S: Into<String> + Send,
-        I: IntoIterator<Item = String> + Send;
+        C: Into<String> + Send,
+        A: IntoIterator<Item = String> + Send,
+        S: Into<PathBuf> + Send;
 }
 
+#[derive(Debug, Clone)]
 pub struct RunGenerator {
-    layer_dir: PathBuf,
-    container_dir: PathBuf,
+    layers_dir: PathBuf,
+    containers_dir: PathBuf,
 }
 
 impl RunGenerator {
     fn container_dir(&self, container_name: &str) -> PathBuf {
-        let mut directory = self.container_dir.clone();
+        let mut directory = self.containers_dir.clone();
         directory.push(container_name);
         directory
     }
@@ -50,12 +72,12 @@ impl RunGenerator {
     }
 }
 
-impl Default for RunGenerator {
-    fn default() -> Self {
-        RunGenerator {
-            layer_dir: layer_dir(),
-            container_dir: container_dir(),
-        }
+impl RunGenerator {
+    pub fn new() -> Result<Self> {
+        Ok(RunGenerator {
+            layers_dir: layers_dir()?,
+            containers_dir: containers_dir()?,
+        })
     }
 }
 
@@ -94,15 +116,17 @@ fn resolve_user(image: Image) -> (Uid, Gid) {
         Some(config) => match config.user {
             Some(user) => {
                 let mut parts = user.split(':');
-                let user_name_or_id = parts.next().unwrap();
+                let _user_name_or_id = parts.next().unwrap();
                 let group_name_or_id = parts.next();
 
-                let user_obj = User::from_name(user_name_or_id).unwrap();
+                let user_obj: Option<User> = None;
+                // TODO fix without nix. Nix is build against glibc which does not work when statically compiled.
+                // let user_obj = User::from_name(user_name_or_id).expect("Could not get user");
 
-                let mut group_obj = None;
-                if let Some(group_name_or_id) = group_name_or_id {
-                    group_obj = Group::from_name(group_name_or_id).unwrap();
-                }
+                let group_obj: Option<Group> = None;
+                // if let Some(group_name_or_id) = group_name_or_id {
+                //     group_obj = Group::from_name(group_name_or_id).unwrap();
+                // }
 
                 let uid = user_obj.map(|u| u.uid).map_or(root_user, |u| u);
                 let gid = group_obj
@@ -110,7 +134,7 @@ fn resolve_user(image: Image) -> (Uid, Gid) {
                     .or_else(|| group_name_or_id.map(|g| Gid::from_raw(g.parse::<u32>().unwrap())))
                     .map_or(root_group, |g| g);
 
-                (uid, gid)
+                    (uid, gid)
             }
             None => (root_user, root_group),
         },
@@ -123,6 +147,7 @@ fn build_linux(image: Image) -> Linux {
     let host_gid = unistd::getgid();
 
     let image_user = resolve_user(image);
+
     Linux {
         uid_mappings: Some(vec![LinuxIdMapping {
             container_id: image_user.0.into(),
@@ -165,6 +190,8 @@ fn build_mounts(
     upper_dir: PathBuf,
     work_dir: PathBuf,
     bin_dir: PathBuf,
+    executable_path: PathBuf,
+    socket_path: PathBuf,
 ) -> Vec<Mount> {
     let mounts = vec![
         Mount {
@@ -250,9 +277,21 @@ fn build_mounts(
             ]),
         },
         Mount {
-            destination: "/usr/bin/doe".into(),
+            destination: container_bin_dir().into(),
             typ: Some("bind".into()),
             source: bin_dir.into(),
+            options: Some(vec!["rbind".into(), "rw".into()]),
+        },
+        Mount {
+            destination: container_binary().into(),
+            typ: Some("bind".into()),
+            source: executable_path.into(),
+            options: Some(vec!["rbind".into(), "rw".into()]),
+        },
+        Mount {
+            destination: container_socket().into(),
+            typ: Some("bind".into()),
+            source: socket_path.into(),
             options: Some(vec!["rbind".into(), "rw".into()]),
         },
     ];
@@ -311,10 +350,10 @@ fn build_env(image: Image, config: ContainerConfig) -> Vec<String> {
     }
 
     // TODO add inherted envvars from calling process
-
+    let bin_dir = container_bin_dir();
     let new_path = match map.get("PATH") {
-        Some(current_path) => format!("{}:{}", current_path, BIN_DIR),
-        None => BIN_DIR.to_string(),
+        Some(current_path) => format!("{}:{}", current_path, bin_dir),
+        None => bin_dir,
     };
 
     map.insert("PATH".to_string(), new_path);
@@ -324,14 +363,14 @@ fn build_env(image: Image, config: ContainerConfig) -> Vec<String> {
         .collect()
 }
 
-fn build_rootless_runtime_bundle<I>(
+fn build_rootless_runtime_bundle<A>(
     image: &Image,
     config: &ContainerConfig,
     mounts: Vec<Mount>,
-    arguments: I,
+    arguments: A,
 ) -> Spec
 where
-    I: IntoIterator<Item = String>,
+    A: IntoIterator<Item = String>,
 {
     let root = Root {
         readonly: Some(false),
@@ -361,7 +400,7 @@ where
 }
 
 fn write_container_script(path: &Path, target: &str) -> Result<()> {
-    let script = format!("#!{}/doe call\n{}\n", BIN_DIR, target);
+    let script = format!("#!{} call\n{}\n", container_binary(), target);
 
     let mut file =
         File::create(&path).with_context(|| format!("could not create file {:?}", &path))?;
@@ -387,18 +426,23 @@ fn write_container_script(path: &Path, target: &str) -> Result<()> {
 
 #[async_trait]
 impl RuntimeBundleGenerator for RunGenerator {
-    async fn build<S, I>(
+    async fn build<C, A, S>(
         &self,
-        container_name: S,
+        container_name: C,
         config: &ContainerConfig,
-        arguments: I,
+        arguments: A,
+        socket_path: S,
     ) -> Result<PathBuf>
     where
-        S: Into<String> + Send,
-        I: IntoIterator<Item = String> + Send,
+        C: Into<String> + Send,
+        A: IntoIterator<Item = String> + Send,
+        S: Into<PathBuf> + Send,
     {
         let container: String = container_name.into();
-        let mut manager = ImageManager::default();
+        log::debug!("building runtime bundle for `{}`", container);
+        let manager = ImageManager::new().context("could not construct `ImageManager`")?;
+
+        log::debug!("prepping image `{}`", &config.image);
         let image = manager.prepare(&config.image).await?;
 
         let lower_dirs: Vec<PathBuf> = image
@@ -406,7 +450,7 @@ impl RuntimeBundleGenerator for RunGenerator {
             .diff_ids
             .iter()
             .map(|diff_id| {
-                let mut layer_dir = self.layer_dir.clone();
+                let mut layer_dir = self.layers_dir.clone();
                 layer_dir.push(diff_id.algorithm.to_string());
                 layer_dir.push(diff_id.encoded.to_string());
                 layer_dir
@@ -415,6 +459,7 @@ impl RuntimeBundleGenerator for RunGenerator {
 
         // create_directories(&lower_dirs)?;
 
+        log::trace!("ensuring directories exists");
         let upper_dir = self.location(&container, "upper");
         let work_dir = self.location(&container, "work");
         let bin_dir = self.location(&container, "bin");
@@ -427,7 +472,7 @@ impl RuntimeBundleGenerator for RunGenerator {
             root_fs,
         ])?;
 
-        // Add linked containers to bin directory
+        log::trace!("adding linked containers to bin directory");
         if let Some(links) = &config.links {
             for (name, container) in links {
                 let mut script_path = bin_dir.clone();
@@ -439,27 +484,29 @@ impl RuntimeBundleGenerator for RunGenerator {
                     container,
                     script_path.to_str().unwrap()
                 );
-                write_container_script(&script_path, &container)?;
+                write_container_script(&script_path, container)?;
             }
         };
 
-        // Add current binary to bin directory
-        let mut doe_path = bin_dir.clone();
-        doe_path.push("doe");
-        let current = env::current_exe()?;
-        fs::hard_link(current, doe_path)?;
-
-        let mounts = build_mounts(lower_dirs, upper_dir, work_dir, bin_dir);
+        let current = env::current_exe().context("could not determin current executable")?;
+        
+        log::trace!("building mounts");
+        let mounts = build_mounts(
+            lower_dirs,
+            upper_dir,
+            work_dir,
+            bin_dir,
+            current,
+            socket_path.into(),
+        );
 
         let spec = build_rootless_runtime_bundle(&image, config, mounts, arguments);
+        log::debug!("saving container `{}` runtime bundle spec in `{:?}`", container, config_file);
         spec.save(&config_file)?;
 
         let container_dir = self.container_dir(&container);
-        Ok(container_dir)
 
-        // 7. Generate scripts for container's links
-        // 8. Mount scripts and current binary
-        // 9. Overwrite with any user defined configuration
+        Ok(container_dir)
     }
 }
 
