@@ -245,8 +245,9 @@ impl Config {
         self.containers.values()
     }
 
-    pub fn get_container_by_name(&self, name: &str) -> Option<&ContainerConfig> {
-        self.containers.get(name)
+    pub fn get_container_by_name(&self, name: &str) -> Option<ContainerConfig> {
+        let container = self.containers.get(name);
+        container.cloned()
     }
 }
 

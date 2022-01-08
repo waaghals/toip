@@ -1,5 +1,8 @@
+use const_format::formatc;
+
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
-pub const NAME: &str = env!("CARGO_PKG_NAME");
+pub const APPLICATION_NAME: &str = env!("CARGO_PKG_NAME");
 pub const HOMEPAGE: &str = env!("CARGO_PKG_HOMEPAGE");
 pub const QUALIFIER: &str = "dev";
 pub const ORGANIZATION: &str = "waaghals";
+pub const USER_AGENT: &str = formatc!("{}/{} ({})", APPLICATION_NAME, VERSION, HOMEPAGE);

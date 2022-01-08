@@ -1,22 +1,39 @@
-use std::fmt;
-use std::fs;
+use std::env::consts::{ARCH, OS};
 use std::io::Read;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::{fmt, fs};
 
 use anyhow::{anyhow, Context as AnyhowContext, Result};
 use async_trait::async_trait;
 use flate2::read::GzDecoder;
+use http::header::{ACCEPT, CONTENT_TYPE};
+use http::{header, HeaderValue, Method, Request};
+use hyper::Client;
+use hyper_trust_dns_connector::{new_async_http_connector, AsyncHyperResolver};
 use log;
-use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_TYPE};
-use reqwest::{Client, IntoUrl, Method};
 use sha2::{Digest as ShaDigest, Sha256, Sha512};
-use std::env::consts::{ARCH, OS};
 use thiserror::Error;
+use tokio::sync::Mutex;
+use tower::{Service, ServiceBuilder, ServiceExt};
+use tower_http::classify::StatusInRangeAsFailures;
+use tower_http::decompression::{DecompressionLayer};
+use tower_http::follow_redirect::FollowRedirectLayer;
+use tower_http::set_header::SetRequestHeaderLayer;
+use tower_http::trace::{Trace, TraceLayer};
 
-use super::image::ManifestList;
-use super::image::{Algorithm, Descriptor, Digest, Image, Manifest, ManifestItem, Reference};
-use crate::dirs::blob_dir;
-use crate::metadata::{HOMEPAGE, NAME, VERSION};
+use super::image::{
+    Algorithm,
+    Descriptor,
+    Digest,
+    Image,
+    Manifest,
+    ManifestItem,
+    ManifestList,
+    Reference,
+};
+use crate::dirs::blobs_dir;
+use crate::metadata;
 
 #[derive(Debug)]
 enum Context<'a> {
@@ -39,14 +56,12 @@ struct Response {
 
 #[async_trait]
 trait Downloader {
-    async fn download<U>(
+    async fn download(
         &self,
-        url: U,
+        url: &String,
         accept_headers: Vec<&String>,
         context: &Context,
-    ) -> Result<Response>
-    where
-        U: IntoUrl + Send;
+    ) -> Result<Response>;
 }
 
 #[async_trait]
@@ -59,13 +74,13 @@ pub trait Registry {
 pub struct OciRegistry {
     // TODO cleanup this type. Cannot use Box<dyn ...> because of generic arguments in a method
     downloader: DecompressDownloader<
-        VerifyingDownloader<CachingDownloader<VerifyingDownloader<ReqwestDownloader>>>,
+        VerifyingDownloader<CachingDownloader<VerifyingDownloader<TowerDownloader>>>,
     >,
 }
 
-impl Default for OciRegistry {
-    fn default() -> Self {
-        let cache_dir = blob_dir();
+impl OciRegistry {
+    pub fn new() -> Result<Self> {
+        let cache_dir = blobs_dir().context("could not determin blob directory")?;
         let downloader = DecompressDownloader {
             inner: VerifyingDownloader {
                 context: "cache",
@@ -73,16 +88,15 @@ impl Default for OciRegistry {
                     cache_dir,
                     inner: VerifyingDownloader {
                         context: "download",
-                        inner: ReqwestDownloader::default(),
+                        // inner: ReqwestDownloader::default(),
+                        inner: TowerDownloader::default(),
                     },
                 },
             },
         };
-        OciRegistry { downloader }
+        Ok(OciRegistry { downloader })
     }
-}
 
-impl OciRegistry {
     fn blob_url(&self, host: &str, name: &str, descriptor: &Descriptor) -> String {
         format!("https://{}/v2/{}/blobs/{}", host, name, descriptor.digest)
     }
@@ -174,7 +188,7 @@ impl Registry for OciRegistry {
         let response = self
             .downloader
             .download(
-                uri,
+                &uri,
                 vec![&descriptor.media_type],
                 &Context::Descriptor(descriptor),
             )
@@ -194,7 +208,7 @@ impl Registry for OciRegistry {
         let uri = self.blob_url(host, name, descriptor);
         let response = self
             .downloader
-            .download(uri, vec![], &Context::Descriptor(descriptor))
+            .download(&uri, vec![], &Context::Descriptor(descriptor))
             .await?;
 
         Ok(response.bytes)
@@ -202,48 +216,86 @@ impl Registry for OciRegistry {
 }
 
 #[derive(Debug)]
-struct ReqwestDownloader {
-    client: Client,
+pub struct TowerDownloader {
+    client: Arc<
+        Mutex<
+            Trace<
+                tower_http::set_header::request::SetRequestHeader<
+                    tower_http::decompression::Decompression<
+                        tower_http::follow_redirect::FollowRedirect<
+                            // hyper::client::Client<hyper::client::connect::HttpsConnector>,
+                            hyper::client::Client<
+                                // hyper_tls::HttpsConnector<hyper::client::connect::HttpConnector>,
+                                hyper_rustls::HttpsConnector<
+                                    hyper::client::connect::HttpConnector<AsyncHyperResolver>,
+                                >,
+                            >,
+                        >,
+                    >,
+                    http::header::HeaderValue,
+                >,
+                tower_http::classify::SharedClassifier<
+                    tower_http::classify::StatusInRangeAsFailures,
+                >,
+            >,
+        >,
+    >,
 }
 
-impl ReqwestDownloader {
-    fn new(user_agent: &str) -> Self {
-        ReqwestDownloader {
-            client: Client::builder().user_agent(user_agent).build().unwrap(),
-        }
-    }
-}
-
-impl Default for ReqwestDownloader {
+impl Default for TowerDownloader {
     fn default() -> Self {
-        ReqwestDownloader::new(format!("{}/{} ({})", NAME, VERSION, HOMEPAGE).as_str())
+        let mut http = new_async_http_connector().unwrap();
+        http.enforce_http(false);
+        let https = hyper_rustls::HttpsConnectorBuilder::new()
+            .with_native_roots()
+            .https_or_http()
+            .enable_http1()
+            .enable_http2()
+            .wrap_connector(http);
+
+        let hyper = Client::builder().build::<_, hyper::Body>(https);
+
+        let client = ServiceBuilder::new()
+            .layer(TraceLayer::new(
+                StatusInRangeAsFailures::new(400..=599).into_make_classifier(),
+            ))
+            .layer(SetRequestHeaderLayer::overriding(
+                header::USER_AGENT,
+                HeaderValue::from_static(metadata::USER_AGENT),
+            ))
+            .layer(DecompressionLayer::new())
+            .layer(FollowRedirectLayer::new())
+            .service(hyper);
+
+        TowerDownloader {
+            client: Arc::new(Mutex::new(client)),
+        }
     }
 }
 
 #[async_trait]
-impl Downloader for ReqwestDownloader {
-    async fn download<U>(
+impl Downloader for TowerDownloader {
+    async fn download(
         &self,
-        url: U,
+        url: &String,
         accept_headers: Vec<&String>,
         _: &Context,
-    ) -> Result<Response>
-    where
-        U: IntoUrl + Send,
-    {
-        let mut headers = HeaderMap::new();
-        for header in accept_headers {
-            let value = HeaderValue::from_str(header)?;
-            headers.append(ACCEPT, value);
+    ) -> Result<Response> {
+        let mut builder = Request::builder().uri(url).method(Method::GET);
+        {
+            let headers = builder.headers_mut().unwrap();
+            for header in accept_headers {
+                headers.insert(ACCEPT, HeaderValue::from_str(header)?);
+            }
         }
 
-        let request = self
-            .client
-            .request(Method::GET, url)
-            .headers(headers)
-            .build()?;
+        let request = builder.body(hyper::Body::empty())?;
 
-        let response = self.client.execute(request).await?;
+        log::debug!("downloading `{} {}`", request.method(), request.uri());
+        let mut client = self.client.lock().await;
+        let ready_client = client.ready().await?;
+        let response = ready_client.call(request).await?;
+
         let content_type = response
             .headers()
             .get(CONTENT_TYPE)
@@ -252,18 +304,21 @@ impl Downloader for ReqwestDownloader {
             .context("could not convert Content-Type header to string")?
             .to_string()
             .clone();
+        log::trace!("received context type `{}`", content_type);
 
         let status = response.status();
         if !status.is_success() {
             return Err(anyhow!("received unsucessful response status `{}`", status));
         }
 
-        let bytes = response.bytes().await?;
-
-        Ok(Response {
-            bytes: bytes.to_vec(),
-            content_type,
-        })
+        let bytes = hyper::body::to_bytes(response.into_body()).await;
+        match bytes {
+            Ok(bytes) => Ok(Response {
+                bytes: bytes.to_vec(),
+                content_type,
+            }),
+            Err(_err) => todo!(),
+        }
     }
 }
 
@@ -330,15 +385,12 @@ impl<T> Downloader for VerifyingDownloader<T>
 where
     T: Downloader + Sync + Send,
 {
-    async fn download<U>(
+    async fn download(
         &self,
-        url: U,
+        url: &String,
         accept_headers: Vec<&String>,
         context: &Context,
-    ) -> Result<Response>
-    where
-        U: IntoUrl + Send,
-    {
+    ) -> Result<Response> {
         let response = self.inner.download(url, accept_headers, context).await?;
 
         match *context {
@@ -387,15 +439,12 @@ impl<T> Downloader for DecompressDownloader<T>
 where
     T: Downloader + Sync + Send,
 {
-    async fn download<U>(
+    async fn download(
         &self,
-        url: U,
+        url: &String,
         accept_headers: Vec<&String>,
         context: &Context,
-    ) -> Result<Response>
-    where
-        U: IntoUrl + Send,
-    {
+    ) -> Result<Response> {
         let mut response = self.inner.download(url, accept_headers, context).await?;
 
         if response.content_type.ends_with("+gzip") {
@@ -467,15 +516,12 @@ impl<T> Downloader for CachingDownloader<T>
 where
     T: Downloader + Sync + Send,
 {
-    async fn download<U>(
+    async fn download(
         &self,
-        url: U,
+        url: &String,
         accept_headers: Vec<&String>,
         context: &Context,
-    ) -> Result<Response>
-    where
-        U: IntoUrl + Send,
-    {
+    ) -> Result<Response> {
         let digest = match *context {
             Context::Descriptor(descriptor) => Some(&descriptor.digest),
             Context::Digest(digest) => Some(digest),

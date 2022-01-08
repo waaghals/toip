@@ -8,7 +8,7 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug 'doe run bash'",
+            "name": "Debug 'doe run sh'",
             "cargo": {
                 "args": [
                     "build",
@@ -20,7 +20,7 @@
                     "kind": "bin"
                 }
             },
-            "args": ["run", "bash"],
+            "args": ["run", "sh"],
             "cwd": "${workspaceFolder}"
         },
         {
