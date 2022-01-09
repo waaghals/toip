@@ -20,7 +20,7 @@ use oci_spec::{
 };
 
 use crate::config::ContainerConfig;
-use crate::dirs::{containers_dir, layers_dir};
+use crate::dirs;
 use crate::image::manager::ImageManager;
 use crate::metadata::APPLICATION_NAME;
 use crate::oci::image::Image;
@@ -52,33 +52,14 @@ pub trait RuntimeBundleGenerator {
         S: Into<PathBuf> + Send;
 }
 
-#[derive(Debug, Clone)]
-pub struct RunGenerator {
-    layers_dir: PathBuf,
-    containers_dir: PathBuf,
-}
+#[derive(Debug, Clone, Default)]
+pub struct RunGenerator {}
 
-impl RunGenerator {
-    fn container_dir(&self, container_name: &str) -> PathBuf {
-        let mut directory = self.containers_dir.clone();
-        directory.push(container_name);
-        directory
-    }
-
-    fn location(&self, container_name: &str, sub_directory: &str) -> PathBuf {
-        let mut directory = self.container_dir(container_name);
-        directory.push(sub_directory);
-        directory
-    }
-}
-
-impl RunGenerator {
-    pub fn new() -> Result<Self> {
-        Ok(RunGenerator {
-            layers_dir: layers_dir()?,
-            containers_dir: containers_dir()?,
-        })
-    }
+fn container_path(container_dir: &PathBuf, path: &str) -> Result<PathBuf> {
+    let mut dir = container_dir.clone();
+    dir.push(path);
+    dirs::create(&dir)?;
+    Ok(dir)
 }
 
 fn overlay_option<S>(kind: S, paths: &[PathBuf]) -> String
@@ -97,13 +78,6 @@ where
     option.push_str(&joined);
 
     option
-}
-
-fn create_directories(directories: &[PathBuf]) -> Result<()> {
-    for directory in directories {
-        fs::create_dir_all(directory)?;
-    }
-    Ok(())
 }
 
 // TODO improve error handling here
@@ -134,7 +108,7 @@ fn resolve_user(image: Image) -> (Uid, Gid) {
                     .or_else(|| group_name_or_id.map(|g| Gid::from_raw(g.parse::<u32>().unwrap())))
                     .map_or(root_group, |g| g);
 
-                    (uid, gid)
+                (uid, gid)
             }
             None => (root_user, root_group),
         },
@@ -438,39 +412,32 @@ impl RuntimeBundleGenerator for RunGenerator {
         A: IntoIterator<Item = String> + Send,
         S: Into<PathBuf> + Send,
     {
-        let container: String = container_name.into();
-        log::debug!("building runtime bundle for `{}`", container);
+        let container_id: String = container_name.into();
+        log::debug!("building runtime bundle for `{}`", container_id);
         let manager = ImageManager::new().context("could not construct `ImageManager`")?;
 
         log::debug!("prepping image `{}`", &config.image);
         let image = manager.prepare(&config.image).await?;
 
-        let lower_dirs: Vec<PathBuf> = image
+        let lower_dirs = image
             .rootfs
             .diff_ids
             .iter()
             .map(|diff_id| {
-                let mut layer_dir = self.layers_dir.clone();
-                layer_dir.push(diff_id.algorithm.to_string());
-                layer_dir.push(diff_id.encoded.to_string());
-                layer_dir
+                dirs::layer_dir(&diff_id.algorithm.to_string(), &diff_id.encoded)
             })
-            .collect();
+            .collect::<Result<Vec<PathBuf>>>()
+            .context("could not determin lower dirs")?;
 
-        // create_directories(&lower_dirs)?;
+        log::trace!("ensuring container directories exists");
+        let container_dir = dirs::container(&container_id)?;
+        let upper_dir = container_path(&container_dir, "upper")?;
+        let work_dir = container_path(&container_dir, "work")?;
+        let bin_dir = container_path(&container_dir, "bin")?;
+        container_path(&container_dir, "rootfs")?;
 
-        log::trace!("ensuring directories exists");
-        let upper_dir = self.location(&container, "upper");
-        let work_dir = self.location(&container, "work");
-        let bin_dir = self.location(&container, "bin");
-        let root_fs = self.location(&container, "rootfs");
-        let config_file = self.location(&container, "config.json");
-        create_directories(&[
-            upper_dir.clone(),
-            work_dir.clone(),
-            bin_dir.clone(),
-            root_fs,
-        ])?;
+        let mut config_file = container_dir.clone();
+        config_file.push("config.json");
 
         log::trace!("adding linked containers to bin directory");
         if let Some(links) = &config.links {
@@ -489,7 +456,7 @@ impl RuntimeBundleGenerator for RunGenerator {
         };
 
         let current = env::current_exe().context("could not determin current executable")?;
-        
+
         log::trace!("building mounts");
         let mounts = build_mounts(
             lower_dirs,
@@ -501,10 +468,12 @@ impl RuntimeBundleGenerator for RunGenerator {
         );
 
         let spec = build_rootless_runtime_bundle(&image, config, mounts, arguments);
-        log::debug!("saving container `{}` runtime bundle spec in `{:?}`", container, config_file);
+        log::debug!(
+            "saving container `{}` runtime bundle spec in `{:?}`",
+            container_id,
+            config_file
+        );
         spec.save(&config_file)?;
-
-        let container_dir = self.container_dir(&container);
 
         Ok(container_dir)
     }

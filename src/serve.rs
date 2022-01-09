@@ -93,6 +93,8 @@ impl Serve {
         log::info!("listening on `{}`", &self.socket_path.to_string_lossy());
         let listener = UnixListener::bind(&self.socket_path)?;
 
+
+        log::info!("listening2 on `{}`", &self.socket_path.to_string_lossy());
         for incomming in listener.incoming() {
             let stream = incomming?;
 

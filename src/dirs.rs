@@ -35,42 +35,89 @@ where
     Ok(directory)
 }
 
-pub fn layers_dir() -> Result<PathBuf> {
+fn state_dir<P>(sub_directory: P) -> Result<PathBuf>
+where
+    P: AsRef<Path>,
+{
+    let project_directories = project_directories()?;
+    let state_directory = project_directories.state_dir();
+    match state_directory {
+        Some(directory) => {
+            let mut directory: PathBuf = directory.into();
+            directory.push(sub_directory);
+            Ok(directory)
+        }
+        None => cache_dir(sub_directory),
+    }
+}
+
+fn run_dir<P>(path: P) -> Result<PathBuf>
+where
+    P: AsRef<Path>,
+{
+    let project_directories = project_directories()?;
+    let run_directory = project_directories.runtime_dir();
+
+    match run_directory {
+        Some(directory) => {
+            let mut directory: PathBuf = directory.into();
+            directory.push(path);
+            Ok(directory)
+        }
+        None => data_dir(path),
+    }
+}
+
+fn layers_dir() -> Result<PathBuf> {
     cache_dir("layers")
+}
+
+pub fn layer_dir<A, H>(algorithm: A, hash: H) -> Result<PathBuf>
+where
+    A: AsRef<Path>,
+    H: AsRef<Path>,
+{
+    let mut dir = layers_dir()?;
+    dir.push(algorithm);
+    dir.push(hash);
+
+    Ok(dir)
 }
 
 pub fn blobs_dir() -> Result<PathBuf> {
     cache_dir("blobs")
 }
 
-pub fn containers_dir() -> Result<PathBuf> {
-    cache_dir("containers")
+fn containers_dir() -> Result<PathBuf> {
+    state_dir("containers")
 }
 
-pub fn volumes_dir() -> Result<PathBuf> {
+fn volumes_dir() -> Result<PathBuf> {
     data_dir("volumes")
 }
 
-pub fn run_dir() -> Result<PathBuf> {
-    let project_directories = project_directories()?;
-    let run_directory = project_directories.runtime_dir();
-
-    match run_directory {
-        Some(directory) => Ok(directory.into()),
-        None => data_dir("run"),
-    }
+pub fn volume<V>(volume: V) -> Result<PathBuf>
+where
+    V: AsRef<Path>,
+{
+    let mut dir = volumes_dir()?;
+    dir.push(volume);
+    Ok(dir)
 }
 
-pub fn create_directories() -> anyhow::Result<()> {
-    create_directory(&layers_dir()?)?;
-    create_directory(&blobs_dir()?)?;
-    create_directory(&containers_dir()?)?;
-    create_directory(&volumes_dir()?)?;
-    create_directory(&run_dir()?)?;
-
-    Ok(())
+pub fn container<C>(container_id: C) -> Result<PathBuf>
+where
+    C: AsRef<Path>,
+{
+    let mut dir: PathBuf = containers_dir()?;
+    dir.push(container_id);
+    Ok(dir)
 }
 
-fn create_directory(dir: &PathBuf) -> anyhow::Result<()> {
+pub fn socket_path() -> Result<PathBuf> {
+    run_dir("socket")
+}
+
+pub fn create(dir: &Path) -> anyhow::Result<()> {
     fs::create_dir_all(dir).with_context(|| format!("could not create directory `{:#?}`", dir))
 }

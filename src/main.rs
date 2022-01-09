@@ -2,13 +2,13 @@
 #![feature(unix_socket_ancillary_data)]
 #![feature(const_mut_refs)]
 use std::collections::HashMap;
-use std::env;
 use std::fs::OpenOptions;
 use std::io::{BufRead, BufReader, IoSlice};
 use std::os::unix::io::FromRawFd;
 use std::os::unix::net::{SocketAncillary, UnixStream};
 use std::path::{Path, PathBuf};
 use std::process::{self, Stdio};
+use std::{env, fs};
 
 use anyhow::{Context, Result};
 use itertools::join;
@@ -17,10 +17,9 @@ use rand::{self, Rng};
 use serve::CallInfo;
 use structopt::StructOpt;
 use tokio::sync::mpsc;
-use tokio_stream::wrappers::{ReceiverStream};
+use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::StreamExt;
 
-use crate::dirs::{create_directories, run_dir};
 use crate::image::manager::ImageManager;
 use crate::oci::runtime::{OciCliRuntime, Runtime};
 use crate::runtime::generator::{RunGenerator, RuntimeBundleGenerator};
@@ -126,12 +125,6 @@ where
     Ok(())
 }
 
-fn socket_path() -> Result<PathBuf> {
-    let mut socket_path = run_dir().context("could not determin run directory for socket")?;
-    socket_path.push("socket");
-    Ok(socket_path)
-}
-
 #[tokio::main()]
 async fn main() -> Result<()> {
     let cli = Cli::from_args();
@@ -140,7 +133,6 @@ async fn main() -> Result<()> {
     match cli.command {
         Command::Init { cmd, args } => init::spawn(cmd, args)?,
         Command::Run { alias, args } => {
-            create_directories().context("could not initialize directories")?;
             // TODO setup unique socket for each run command
 
             let dir = env::current_dir()?;
@@ -148,13 +140,12 @@ async fn main() -> Result<()> {
             let config = config::from_dir(&dir)?;
 
             let runtime = OciCliRuntime::default();
-            let runtime_generator =
-                RunGenerator::new().context("could not construct `RunGenerator`")?;
+            let runtime_generator = RunGenerator::default();
 
             let (tx, rx) = mpsc::channel(100);
 
             // Start listening for incomming calls
-            let socket = socket_path().context("could not determin socket path")?;
+            let socket = dirs::socket_path().context("could not determin socket path")?;
             let server = Serve::new(&socket, tx);
 
             // TODO improve error handling in the threads below
@@ -246,6 +237,10 @@ async fn main() -> Result<()> {
                     }
                 });
             }
+
+            log::info!("removing socket `{}`", socket.display());
+            fs::remove_file(&socket)
+                .with_context(|| format!("could not delete socket `{}`", socket.display()))?;
         }
         Command::Call { file_path, args } => {
             let file = OpenOptions::new().read(true).write(true).open(&file_path)?;
