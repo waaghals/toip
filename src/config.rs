@@ -253,17 +253,17 @@ impl Config {
 
 pub fn from_file(file_name: &Path) -> Result<Config> {
     let file = File::open(file_name)
-        .with_context(|| format!("config file `{:?}` not found.", file_name))?;
+        .with_context(|| format!("config file `{}` not found.", file_name.display()))?;
     let mut buf_reader = BufReader::new(file);
     let mut contents = String::new();
     buf_reader
         .read_to_string(&mut contents)
-        .with_context(|| format!("unable to read config file `{:?}`.", file_name))?;
+        .with_context(|| format!("unable to read config file `{}`.", file_name.display()))?;
 
-    toml::from_str(&contents)
-        .with_context(|| format!("unable to parse config file `{:?}`.", file_name))
+    serde_yaml::from_str(&contents)
+        .with_context(|| format!("unable to parse config file `{}`.", file_name.display()))
 }
 
 pub fn from_dir(dir: &Path) -> Result<Config> {
-    from_file(&dir.join("toip.toml"))
+    from_file(&dir.join("toip.yaml"))
 }
