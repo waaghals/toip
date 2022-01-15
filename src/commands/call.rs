@@ -1,26 +1,12 @@
 use std::collections::HashMap;
-use std::fs::OpenOptions;
-use std::io::{BufRead, BufReader, IoSlice};
-use std::os::unix::io::FromRawFd;
+use std::io::IoSlice;
 use std::os::unix::net::{SocketAncillary, UnixStream};
-use std::path::{Path, PathBuf};
-use std::process::{self, Stdio};
-use std::{env, fs};
+use std::path::Path;
 
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
-use clap_verbosity_flag::Verbosity;
 use itertools::join;
-use rand::distributions::Alphanumeric;
-use rand::{self, Rng};
-use tokio::sync::mpsc;
-use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::StreamExt;
 
-use crate::image::manager::ImageManager;
-use crate::oci::runtime::{OciCliRuntime, Runtime};
-use crate::runtime::generator::{RunGenerator, RuntimeBundleGenerator};
-use crate::serve::Serve;
 use crate::CallInfo;
 
 pub fn call<S, C, A>(socket_path: S, alias: C, args: A) -> Result<()>
