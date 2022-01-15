@@ -1,6 +1,7 @@
 #![feature(async_stream)]
 #![feature(unix_socket_ancillary_data)]
 #![feature(const_mut_refs)]
+
 use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::io::{BufRead, BufReader, IoSlice};
@@ -12,6 +13,7 @@ use std::{env, fs};
 
 use anyhow::{Context, Result};
 use itertools::join;
+use nix::unistd::Uid;
 use rand::distributions::Alphanumeric;
 use rand::{self, Rng};
 use serve::CallInfo;
@@ -24,6 +26,7 @@ use crate::image::manager::ImageManager;
 use crate::oci::runtime::{OciCliRuntime, Runtime};
 use crate::runtime::generator::{RunGenerator, RuntimeBundleGenerator};
 use crate::serve::Serve;
+
 mod config;
 mod dirs;
 mod image;
@@ -68,8 +71,8 @@ enum Command {
     #[structopt(help = "Run a linked container from a runtime config")]
     Call {
         #[structopt(
-            parse(from_os_str),
-            help = "Script with run configuration to interpret"
+        parse(from_os_str),
+        help = "Script with run configuration to interpret"
         )]
         file_path: PathBuf,
         #[structopt(help = "Arguments to call the container with")]
@@ -81,10 +84,10 @@ enum Command {
 }
 
 fn call<S, C, A>(socket_path: S, alias: C, args: A) -> Result<()>
-where
-    S: AsRef<Path>,
-    C: Into<String>,
-    A: IntoIterator<Item = String>,
+    where
+        S: AsRef<Path>,
+        C: Into<String>,
+        A: IntoIterator<Item=String>,
 {
     let call_info = CallInfo {
         name: alias.into(),
@@ -100,7 +103,7 @@ where
     let size = data.len() as u32;
 
     let socket = UnixStream::connect(&socket_path)
-        .with_context(|| format!("could not connnect to socket `{}`", socket_path.display()))?;
+        .with_context(|| format!("could not connect to socket `{}`", socket_path.display()))?;
 
     let buf1 = size.to_be_bytes();
     let bufs = &[IoSlice::new(&buf1), IoSlice::new(data)][..];
@@ -109,7 +112,7 @@ where
     let mut ancillary = SocketAncillary::new(&mut ancillary_buffer[..]);
     ancillary.add_fds(&fds[..]);
     log::debug!(
-        "sending anicillary information over socket `{:#?}` with file descriptors `{}`",
+        "sending ancillary information over socket `{:#?}` with file descriptors `{}`",
         &socket_path,
         join(fds, ", ")
     );
@@ -133,8 +136,6 @@ async fn main() -> Result<()> {
     match cli.command {
         Command::Init { cmd, args } => init::spawn(cmd, args)?,
         Command::Run { alias, args } => {
-            // TODO setup unique socket for each run command
-
             let dir = env::current_dir()?;
             // config.validate()?;
             let config = config::from_dir(&dir)?;
@@ -144,19 +145,25 @@ async fn main() -> Result<()> {
 
             let (tx, rx) = mpsc::channel(100);
 
-            // Start listening for incomming calls
-            let socket = dirs::socket_path().context("could not determin socket path")?;
+            // Start listening for incoming calls
+            let socket = dirs::socket_path().context("could not determine socket path")?;
             let server = Serve::new(&socket, tx);
 
+            let socket_dir = socket
+                .parent()
+                .with_context(|| format!("could not determine socket directory `{}`", socket.display()))?;
+            fs::create_dir_all(socket_dir)
+                .with_context(|| format!("could not create directory `{}`", socket_dir.display()))?;
             // TODO improve error handling in the threads below
-            tokio::spawn(async move {
+            let server_handle = tokio::spawn(async move {
                 let res = server.listen().await;
                 res
             });
 
+
             // Call the setup listener to start the initial container
             let call_socket = socket.clone();
-            tokio::spawn(async move {
+            let call_handle = tokio::spawn(async move {
                 // TODO pass a 'ready' signal through the receiverStream and send the call when it is received.
                 std::thread::sleep(std::time::Duration::from_millis(100));
                 // TODO find container name for alias
@@ -166,8 +173,9 @@ async fn main() -> Result<()> {
             });
 
             // Handle each call instruction
-
             let mut call_instruction_stream = ReceiverStream::new(rx);
+            // Iteration will stop when tx is dropped
+            // tx is dropped whenever server is dropped
             while let Some(instruction) = call_instruction_stream.next().await {
                 let runtime_generator = runtime_generator.clone();
                 let runtime = runtime.clone();
@@ -213,30 +221,35 @@ async fn main() -> Result<()> {
                                 let stdout = Stdio::from_raw_fd(instruction.file_descriptors[1]);
                                 let stderr = Stdio::from_raw_fd(instruction.file_descriptors[2]);
 
-                                // Drop file_descriptors from above so they cannot be used elsewere
+                                // Drop file_descriptors from above so they cannot be used elsewhere
                                 drop(instruction.file_descriptors);
 
                                 runtime
                                     .run(&container_id, &bundle_path, stdin, stdout, stderr)
                                     .unwrap();
+
+                                // TODO close file descriptors
                             }
 
-                            log::trace!("removing bundle path");
+                            log::info!("removing bundle path `{}`", bundle_path.display());
 
-                            // TODO fix permissions when removing file
-                            // fs::remove_dir_all(&bundle_path)
-                            //     .with_context(|| {
-                            //         format!(
-                            //             "could not remove directory `{}`",
-                            //             bundle_path.to_str().unwrap()
-                            //         )
-                            //     })
-                            //     .unwrap();
+                            // TODO find out why work directory within the workdir is non executable
+                            rm_rf::remove(&bundle_path)
+                                .with_context(|| {
+                                    format!(
+                                        "could not remove directory `{}`",
+                                        bundle_path.display()
+                                    )
+                                })
+                                .unwrap();
                         }
                         None => todo!(),
                     }
                 });
             }
+
+            server_handle.await??;
+            call_handle.await??;
 
             log::info!("removing socket `{}`", socket.display());
             fs::remove_file(&socket)
@@ -257,7 +270,7 @@ async fn main() -> Result<()> {
                 .with_context(|| format!("could not call container `{}`", container_name))?;
         }
         Command::Inject {} => {
-            let dir = env::current_dir().context("could not determin current directory")?;
+            let dir = env::current_dir().context("could not determine current directory")?;
             let config = config::from_dir(&dir).with_context(|| {
                 format!("could not parse config from directory `{}`", dir.display())
             })?;

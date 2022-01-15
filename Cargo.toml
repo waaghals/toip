@@ -47,6 +47,7 @@ const_format = { version="0.2.22", features = ["fmt"] }
 hyper-rustls = {version = "0.23.0", features = ["http2"]}
 itertools = "0.10.3"
 hyper-trust-dns-connector = "0.3.0"
+rm_rf = "0.6.1"
 
 [profile.release]
 codegen-units = 1
