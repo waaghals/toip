@@ -29,7 +29,6 @@ use crate::serve::Serve;
 mod config;
 mod dirs;
 mod image;
-mod init;
 mod logger;
 mod metadata;
 mod oci;
@@ -49,15 +48,6 @@ struct Cli {
 enum Command {
     #[structopt(help = "Add the current configured aliases into the shell")]
     Inject {},
-
-    #[structopt(help = "Acts as a containers init process")]
-    Init {
-        #[structopt(help = "Command to start")]
-        cmd: String,
-
-        #[structopt(help = "Arguments to pass to starting process")]
-        args: Vec<String>,
-    },
 
     #[structopt(help = "Run a container for a given alias")]
     Run {
@@ -133,7 +123,6 @@ async fn main() -> Result<()> {
     logger::init(cli.verbosity.log_level()).context("could not initialize logger")?;
     log::trace!("current pid is `{}`", process::id());
     match cli.command {
-        Command::Init { cmd, args } => init::spawn(cmd, args)?,
         Command::Run { alias, args } => {
             let dir = env::current_dir()?;
             // config.validate()?;
