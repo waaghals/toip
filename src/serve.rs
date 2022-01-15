@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use std::io::IoSliceMut;
 use std::os::unix::net::{AncillaryData, SocketAncillary, UnixListener, UnixStream};
-use std::os::unix::prelude::{RawFd};
-use std::path::{PathBuf};
+use std::os::unix::prelude::RawFd;
+use std::path::PathBuf;
+use std::str;
 use std::sync::Arc;
-use std::{str};
 
 use anyhow::{Context, Result};
 use itertools::join;
@@ -80,8 +80,8 @@ pub struct Serve {
 
 impl Serve {
     pub fn new<S>(socket_path: S, sender: Sender<Call>) -> Self
-        where
-            S: Into<PathBuf>,
+    where
+        S: Into<PathBuf>,
     {
         Self {
             socket_path: socket_path.into(),
@@ -104,7 +104,10 @@ impl Serve {
             inner.handle(stream).await?;
         }
 
-        log::info!("stopped listening on `{}`", self.socket_path.to_string_lossy());
+        log::info!(
+            "stopped listening on `{}`",
+            self.socket_path.to_string_lossy()
+        );
         Ok(())
     }
 }

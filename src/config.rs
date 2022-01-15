@@ -265,5 +265,5 @@ pub fn from_file(file_name: &Path) -> Result<Config> {
 }
 
 pub fn from_dir(dir: &Path) -> Result<Config> {
-    from_file(&dir.join(".doe.toml"))
+    from_file(&dir.join("toip.toml"))
 }
