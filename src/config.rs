@@ -4,7 +4,7 @@ use std::convert::{TryFrom, TryInto};
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
-use std::{error, fmt};
+use std::{env, error, fmt};
 
 use anyhow::{Context, Result};
 use regex::Regex;
@@ -266,4 +266,10 @@ pub fn from_file(file_name: &Path) -> Result<Config> {
 
 pub fn from_dir(dir: &Path) -> Result<Config> {
     from_file(&dir.join("toip.yaml"))
+}
+
+pub fn from_current_dir() -> Result<Config> {
+    let dir = env::current_dir().context("could not determine current directory")?;
+    // config.validate()?;
+    self::from_dir(&dir)
 }
