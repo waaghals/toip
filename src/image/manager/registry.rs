@@ -6,27 +6,22 @@ use flate2::read::GzDecoder;
 use tar::Archive;
 
 use crate::config::RegistrySource;
-use crate::dirs::layers_dir;
+use crate::dirs;
 use crate::oci::distribution::{OciRegistry, Registry};
 use crate::oci::image::{Digest, Image};
 
 pub struct RegistryManager {
-    layers_dir: PathBuf,
     client: OciRegistry,
+}
+
+fn destination(digest: &Digest) -> Result<PathBuf> {
+    dirs::layer_dir(&digest.algorithm.to_string(), &digest.encoded)
 }
 
 impl RegistryManager {
     pub fn new() -> Result<Self> {
         let client = OciRegistry::new().context("could not construct `OciRegistry`")?;
-        let layers_dir = layers_dir()?;
-        Ok(RegistryManager { client, layers_dir })
-    }
-
-    fn destination(&self, digest: &Digest) -> PathBuf {
-        let mut path = self.layers_dir.clone();
-        path.push(&digest.algorithm.to_string());
-        path.push(&digest.encoded.to_string());
-        path
+        Ok(RegistryManager { client })
     }
 
     fn verify_layers(&self, _image: &Image) -> Result<()> {
@@ -55,6 +50,18 @@ impl RegistryManager {
                     manifest.config.digest
                 )
             })?;
+            let destination = destination(diff_id).with_context(|| {
+                format!(
+                    "could not determin layer destination for diff `{}`",
+                    diff_id
+                )
+            })?;
+            if destination.exists() {
+                log::debug!("skipping extraction of diff `{}` as layer already exists", diff_id);
+                continue;
+            }
+
+            log::debug!("downloading blob for diff `{}`", diff_id);
             let blob = self
                 .client
                 .layer(&source.registry, &source.repository, layer_descriptor)
@@ -64,8 +71,12 @@ impl RegistryManager {
             let buffer = Cursor::new(blob);
             let decompressed = GzDecoder::new(buffer);
             let mut tar = Archive::new(decompressed);
-            let destination = self.destination(diff_id);
 
+            log::debug!(
+                "extracting diff `{}` to layer `{}`",
+                diff_id,
+                destination.display()
+            );
             tar.unpack(&destination).with_context(|| {
                 format!(
                     "could not extract layer `{}` to `{}`",
