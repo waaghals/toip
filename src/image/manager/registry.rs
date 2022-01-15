@@ -57,7 +57,10 @@ impl RegistryManager {
                 )
             })?;
             if destination.exists() {
-                log::debug!("skipping extraction of diff `{}` as layer already exists", diff_id);
+                log::debug!(
+                    "skipping extraction of diff `{}` as layer already exists",
+                    diff_id
+                );
                 continue;
             }
 

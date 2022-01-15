@@ -13,7 +13,6 @@ use std::{env, fs};
 
 use anyhow::{Context, Result};
 use itertools::join;
-use nix::unistd::Uid;
 use rand::distributions::Alphanumeric;
 use rand::{self, Rng};
 use serve::CallInfo;
@@ -71,8 +70,8 @@ enum Command {
     #[structopt(help = "Run a linked container from a runtime config")]
     Call {
         #[structopt(
-        parse(from_os_str),
-        help = "Script with run configuration to interpret"
+            parse(from_os_str),
+            help = "Script with run configuration to interpret"
         )]
         file_path: PathBuf,
         #[structopt(help = "Arguments to call the container with")]
@@ -84,10 +83,10 @@ enum Command {
 }
 
 fn call<S, C, A>(socket_path: S, alias: C, args: A) -> Result<()>
-    where
-        S: AsRef<Path>,
-        C: Into<String>,
-        A: IntoIterator<Item=String>,
+where
+    S: AsRef<Path>,
+    C: Into<String>,
+    A: IntoIterator<Item = String>,
 {
     let call_info = CallInfo {
         name: alias.into(),
@@ -149,17 +148,20 @@ async fn main() -> Result<()> {
             let socket = dirs::socket_path().context("could not determine socket path")?;
             let server = Serve::new(&socket, tx);
 
-            let socket_dir = socket
-                .parent()
-                .with_context(|| format!("could not determine socket directory `{}`", socket.display()))?;
-            fs::create_dir_all(socket_dir)
-                .with_context(|| format!("could not create directory `{}`", socket_dir.display()))?;
+            let socket_dir = socket.parent().with_context(|| {
+                format!(
+                    "could not determine socket directory `{}`",
+                    socket.display()
+                )
+            })?;
+            fs::create_dir_all(socket_dir).with_context(|| {
+                format!("could not create directory `{}`", socket_dir.display())
+            })?;
             // TODO improve error handling in the threads below
             let server_handle = tokio::spawn(async move {
                 let res = server.listen().await;
                 res
             });
-
 
             // Call the setup listener to start the initial container
             let call_socket = socket.clone();
@@ -265,8 +267,9 @@ async fn main() -> Result<()> {
                 )
             })??;
 
-            // TODO derive socket location; do not hard code it
-            call("/run/doe/sock", &container_name, args)
+            let socket_path = env::var("TOIP_SOCK")
+                .context("environment variable `TOIP_SOCK` does not exists")?;
+            call(socket_path, &container_name, args)
                 .with_context(|| format!("could not call container `{}`", container_name))?;
         }
         Command::Inject {} => {

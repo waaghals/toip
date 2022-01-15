@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
+use const_format::formatcp;
 use nix::unistd::{self, Gid, Group, Uid, User};
 use oci_spec::{
     Linux,
@@ -25,17 +26,9 @@ use crate::image::manager::ImageManager;
 use crate::metadata::APPLICATION_NAME;
 use crate::oci::image::Image;
 
-fn container_bin_dir() -> String {
-    format!("/usr/bin/{}", APPLICATION_NAME)
-}
-
-fn container_binary() -> String {
-    format!("{}/{}", container_bin_dir(), APPLICATION_NAME)
-}
-
-fn container_socket() -> String {
-    format!("/run/{}/sock", APPLICATION_NAME)
-}
+const CONTAINER_BIN_DIR: &str = formatcp!("/usr/bin/{}", APPLICATION_NAME);
+const CONTAINER_BINARY: &str = formatcp!("{}/{}", CONTAINER_BIN_DIR, APPLICATION_NAME);
+const CONTAINER_SOCKET: &str = formatcp!("/run/{}/sock", APPLICATION_NAME);
 
 #[async_trait]
 pub trait RuntimeBundleGenerator {
@@ -251,19 +244,19 @@ fn build_mounts(
             ]),
         },
         Mount {
-            destination: container_bin_dir().into(),
+            destination: CONTAINER_BIN_DIR.into(),
             typ: Some("bind".into()),
             source: bin_dir.into(),
             options: Some(vec!["rbind".into(), "rw".into()]),
         },
         Mount {
-            destination: container_binary().into(),
+            destination: CONTAINER_BINARY.into(),
             typ: Some("bind".into()),
             source: executable_path.into(),
             options: Some(vec!["rbind".into(), "rw".into()]),
         },
         Mount {
-            destination: container_socket().into(),
+            destination: CONTAINER_SOCKET.into(),
             typ: Some("bind".into()),
             source: socket_path.into(),
             options: Some(vec!["rbind".into(), "rw".into()]),
@@ -324,13 +317,14 @@ fn build_env(image: Image, config: ContainerConfig) -> Vec<String> {
     }
 
     // TODO add inherted envvars from calling process
-    let bin_dir = container_bin_dir();
+    let bin_dir = CONTAINER_BIN_DIR.to_string();
     let new_path = match map.get("PATH") {
         Some(current_path) => format!("{}:{}", current_path, bin_dir),
         None => bin_dir,
     };
 
     map.insert("PATH".to_string(), new_path);
+    map.insert("TOIP_PATH".to_string(), CONTAINER_SOCKET.to_string());
 
     map.into_iter()
         .map(|env| format!("{}={}", env.0, env.1))
@@ -374,7 +368,7 @@ where
 }
 
 fn write_container_script(path: &Path, target: &str) -> Result<()> {
-    let script = format!("#!{} call\n{}\n", container_binary(), target);
+    let script = format!("#!{} call\n{}\n", CONTAINER_BINARY, target);
 
     let mut file =
         File::create(&path).with_context(|| format!("could not create file {:?}", &path))?;
@@ -423,9 +417,7 @@ impl RuntimeBundleGenerator for RunGenerator {
             .rootfs
             .diff_ids
             .iter()
-            .map(|diff_id| {
-                dirs::layer_dir(&diff_id.algorithm.to_string(), &diff_id.encoded)
-            })
+            .map(|diff_id| dirs::layer_dir(&diff_id.algorithm.to_string(), &diff_id.encoded))
             .collect::<Result<Vec<PathBuf>>>()
             .context("could not determin lower dirs")?;
 

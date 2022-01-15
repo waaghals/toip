@@ -6,18 +6,20 @@ use std::{fmt, fs};
 
 use anyhow::{anyhow, Context as AnyhowContext, Result};
 use async_trait::async_trait;
+use const_format::formatcp;
 use flate2::read::GzDecoder;
 use http::header::{ACCEPT, CONTENT_TYPE};
 use http::{header, HeaderValue, Method, Request};
 use hyper::Client;
 use hyper_trust_dns_connector::{new_async_http_connector, AsyncHyperResolver};
 use log;
+use metadata::{APPLICATION_NAME, HOMEPAGE, VERSION};
 use sha2::{Digest as ShaDigest, Sha256, Sha512};
 use thiserror::Error;
 use tokio::sync::Mutex;
 use tower::{Service, ServiceBuilder, ServiceExt};
 use tower_http::classify::StatusInRangeAsFailures;
-use tower_http::decompression::{DecompressionLayer};
+use tower_http::decompression::DecompressionLayer;
 use tower_http::follow_redirect::FollowRedirectLayer;
 use tower_http::set_header::SetRequestHeaderLayer;
 use tower_http::trace::{Trace, TraceLayer};
@@ -242,6 +244,7 @@ pub struct TowerDownloader {
     >,
 }
 
+const USER_AGENT: &str = formatcp!("{}/{} ({})", APPLICATION_NAME, VERSION, HOMEPAGE);
 impl Default for TowerDownloader {
     fn default() -> Self {
         let mut http = new_async_http_connector().unwrap();
@@ -261,7 +264,7 @@ impl Default for TowerDownloader {
             ))
             .layer(SetRequestHeaderLayer::overriding(
                 header::USER_AGENT,
-                HeaderValue::from_static(metadata::USER_AGENT),
+                HeaderValue::from_static(USER_AGENT),
             ))
             .layer(DecompressionLayer::new())
             .layer(FollowRedirectLayer::new())

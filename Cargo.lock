@@ -358,47 +358,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "doe"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "bytes",
- "clap-verbosity-flag",
- "const_format",
- "directories",
- "flate2",
- "futures-util",
- "http",
- "hyper",
- "hyper-rustls",
- "hyper-trust-dns-connector",
- "interprocess",
- "itertools",
- "log",
- "nix",
- "oci_spec",
- "rand",
- "regex",
- "rm_rf",
- "serde",
- "serde_derive",
- "serde_json",
- "sha2",
- "simplelog",
- "structopt",
- "tar",
- "termion",
- "thiserror",
- "tokio",
- "tokio-stream",
- "tokio-util",
- "toml",
- "tower",
- "tower-http",
-]
-
-[[package]]
 name = "either"
 version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1723,6 +1682,47 @@ name = "tinyvec_macros"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c"
+
+[[package]]
+name = "toip"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "bytes",
+ "clap-verbosity-flag",
+ "const_format",
+ "directories",
+ "flate2",
+ "futures-util",
+ "http",
+ "hyper",
+ "hyper-rustls",
+ "hyper-trust-dns-connector",
+ "interprocess",
+ "itertools",
+ "log",
+ "nix",
+ "oci_spec",
+ "rand",
+ "regex",
+ "rm_rf",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "sha2",
+ "simplelog",
+ "structopt",
+ "tar",
+ "termion",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "toml",
+ "tower",
+ "tower-http",
+]
 
 [[package]]
 name = "tokio"
