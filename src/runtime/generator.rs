@@ -324,7 +324,7 @@ fn build_env(image: Image, config: ContainerConfig) -> Vec<String> {
     };
 
     map.insert("PATH".to_string(), new_path);
-    map.insert("TOIP_PATH".to_string(), CONTAINER_SOCKET.to_string());
+    map.insert("TOIP_SOCK".to_string(), CONTAINER_SOCKET.to_string());
 
     map.into_iter()
         .map(|env| format!("{}={}", env.0, env.1))
