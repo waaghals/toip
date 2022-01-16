@@ -6,14 +6,13 @@
 use std::env;
 use std::fs::OpenOptions;
 use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
 use std::process::{self};
 
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
-use clap_verbosity_flag::Verbosity;
+use clap::Parser;
 use serve::CallInfo;
 
+use crate::cli::{Cli, Command};
 use crate::command::call::call;
 use crate::command::inject::inject;
 use crate::command::prepare::prepare;
@@ -22,6 +21,7 @@ use crate::oci::runtime::{OciCliRuntime, Runtime};
 use crate::runtime::generator::{RunGenerator, RuntimeBundleGenerator};
 use crate::serve::Serve;
 
+mod cli;
 mod command;
 mod config;
 mod dirs;
@@ -33,52 +33,6 @@ mod progress_bar;
 mod runtime;
 mod script;
 mod serve;
-
-#[derive(Parser, Debug)]
-#[clap(version, author, about)]
-struct Cli {
-    #[clap(flatten)]
-    verbose: Verbosity,
-
-    #[clap(subcommand)]
-    command: Command,
-}
-
-#[derive(Subcommand, Debug)]
-enum Command {
-    /// add the current configured aliases into the shell
-    Inject {},
-
-    /// build and or pull containers
-    Prepare {
-        /// container name
-        #[clap(short, long)]
-        container: Option<String>,
-    },
-
-    /// run a container for a given alias
-    Run {
-        /// alias to run
-        alias: String,
-        /// argument to call the container with
-        args: Vec<String>,
-    },
-
-    /// run a linked container
-    Call {
-        #[clap(parse(from_os_str))]
-        file_path: PathBuf,
-        /// argument to call the container with
-        args: Vec<String>,
-    },
-
-    /// remove cache and/or containers
-    Clean {
-        /// remove containers
-        #[clap(short, long)]
-        containers: bool,
-    },
-}
 
 #[tokio::main()]
 async fn main() -> Result<()> {
@@ -104,7 +58,7 @@ async fn main() -> Result<()> {
                 .with_context(|| format!("could not call container `{}`", container_name))
         }
         Command::Prepare { container } => prepare(container).await,
-        Command::Inject {} => inject(),
+        Command::Inject { shell } => inject(shell),
         _ => todo!(),
     }
 }

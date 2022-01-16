@@ -5,6 +5,7 @@ use std::{env, fs};
 use anyhow::{anyhow, Context, Result};
 use itertools::Itertools;
 
+use crate::cli::Shell;
 use crate::config::Config;
 use crate::{config, dirs, script};
 
@@ -57,7 +58,7 @@ where
     Ok(())
 }
 
-pub fn inject() -> Result<()> {
+pub fn inject(_shell: Shell) -> Result<()> {
     let current_dir = env::current_dir()?;
     let dir = dirs::script(&current_dir)?;
     let config = config::from_dir(&current_dir)?;
