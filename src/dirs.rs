@@ -1,8 +1,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use directories::ProjectDirs;
+use sha2::{Digest, Sha256};
 
 use crate::metadata::{APPLICATION_NAME, ORGANIZATION, QUALIFIER};
 
@@ -87,9 +88,11 @@ where
 pub fn blobs_dir() -> Result<PathBuf> {
     cache_dir("blobs")
 }
-
 fn containers_dir() -> Result<PathBuf> {
     state_dir("containers")
+}
+pub fn scripts_dir() -> Result<PathBuf> {
+    state_dir("scripts")
 }
 
 fn volumes_dir() -> Result<PathBuf> {
@@ -102,6 +105,24 @@ where
 {
     let mut dir = volumes_dir()?;
     dir.push(volume);
+    Ok(dir)
+}
+
+pub fn script<D>(dir: D) -> Result<PathBuf>
+where
+    D: AsRef<Path>,
+{
+    let data = dir
+        .as_ref()
+        .to_str()
+        .ok_or(anyhow!(
+            "cannot convert directory to string to generate script directory hash"
+        ))?
+        .as_ref();
+    let digest = format!("{:x}", Sha256::digest(data));
+
+    let mut dir: PathBuf = scripts_dir()?;
+    dir.push(digest);
     Ok(dir)
 }
 

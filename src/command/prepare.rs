@@ -23,7 +23,7 @@ pub async fn prepare(container: Option<String>) -> Result<()> {
                 .with_context(|| format!("could not prepare container `{}`", name))?;
         }
         None => {
-            for (name, container) in config.containers() {
+            for (name, container) in config.containers {
                 image_manager
                     .prepare(&container.image)
                     .await

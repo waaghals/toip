@@ -14,14 +14,15 @@ use clap::{Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
 use serve::CallInfo;
 
-use crate::commands::call::call;
-use crate::commands::prepare::prepare;
-use crate::commands::run::run;
+use crate::command::call::call;
+use crate::command::inject::inject;
+use crate::command::prepare::prepare;
+use crate::command::run::run;
 use crate::oci::runtime::{OciCliRuntime, Runtime};
 use crate::runtime::generator::{RunGenerator, RuntimeBundleGenerator};
 use crate::serve::Serve;
 
-mod commands;
+mod command;
 mod config;
 mod dirs;
 mod image;
@@ -30,6 +31,7 @@ mod metadata;
 mod oci;
 mod progress_bar;
 mod runtime;
+mod script;
 mod serve;
 
 #[derive(Parser, Debug)]
@@ -45,11 +47,7 @@ struct Cli {
 #[derive(Subcommand, Debug)]
 enum Command {
     /// add the current configured aliases into the shell
-    Inject {
-        /// prepare containers
-        #[clap(short, long)]
-        prepare: Option<bool>,
-    },
+    Inject {},
 
     /// build and or pull containers
     Prepare {
@@ -106,6 +104,7 @@ async fn main() -> Result<()> {
                 .with_context(|| format!("could not call container `{}`", container_name))
         }
         Command::Prepare { container } => prepare(container).await,
-        _ => Ok(()),
+        Command::Inject {} => inject(),
+        _ => todo!(),
     }
 }

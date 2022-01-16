@@ -10,7 +10,7 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::StreamExt;
 
-use crate::commands::call::call;
+use crate::command::call::call;
 use crate::{config, dirs, OciCliRuntime, RunGenerator, Runtime, RuntimeBundleGenerator, Serve};
 
 pub async fn run(alias: String, args: Vec<String>) -> Result<()> {

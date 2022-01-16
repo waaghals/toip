@@ -1,9 +1,6 @@
 use std::collections::HashMap;
 use std::env;
-use std::fs::{self, File};
-use std::io::Write;
-use std::os::unix::prelude::PermissionsExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -21,10 +18,10 @@ use oci_spec::{
 };
 
 use crate::config::ContainerConfig;
-use crate::dirs;
 use crate::image::manager::ImageManager;
 use crate::metadata::APPLICATION_NAME;
 use crate::oci::image::Image;
+use crate::{dirs, script};
 
 const CONTAINER_BIN_DIR: &str = formatcp!("/usr/bin/{}", APPLICATION_NAME);
 const CONTAINER_BINARY: &str = formatcp!("{}/{}", CONTAINER_BIN_DIR, APPLICATION_NAME);
@@ -367,31 +364,6 @@ where
     }
 }
 
-fn write_container_script(path: &Path, target: &str) -> Result<()> {
-    let script = format!("#!{} call\n{}\n", CONTAINER_BINARY, target);
-
-    let mut file =
-        File::create(&path).with_context(|| format!("could not create file {:?}", &path))?;
-
-    file.write_all(script.as_bytes())
-        .with_context(|| format!("could not write to file {:?}", &file))?;
-
-    let mut permissions = fs::metadata(&path)
-        .with_context(|| format!("could not read metadata for file {:?}", &path))?
-        .permissions();
-    permissions.set_mode(0o744);
-
-    fs::set_permissions(&path, permissions).with_context(|| {
-        format!(
-            "could permissions to `{}` for file `{}`",
-            744,
-            path.to_str().unwrap()
-        )
-    })?;
-
-    Ok(())
-}
-
 #[async_trait]
 impl RuntimeBundleGenerator for RunGenerator {
     async fn build<C, A, S>(
@@ -443,7 +415,8 @@ impl RuntimeBundleGenerator for RunGenerator {
                     container,
                     script_path.to_str().unwrap()
                 );
-                write_container_script(&script_path, container)?;
+                script::create_call(&script_path, CONTAINER_BINARY, container)
+                    .context("could not create call script")?;
             }
         };
 

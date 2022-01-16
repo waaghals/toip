@@ -9,7 +9,6 @@ use anyhow::{Context, Result};
 use regex::Regex;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use serde_derive::{Deserialize as DeriveDeserialize, Serialize as DeriveSerialize};
-use thiserror::Error;
 
 use crate::oci::image::Reference;
 
@@ -204,9 +203,9 @@ pub struct ContainerConfig {
 
 #[derive(Debug, DeriveDeserialize, DeriveSerialize, Clone)]
 pub struct Config {
-    containers: HashMap<String, ContainerConfig>,
-    volumes: HashMap<String, String>,
-    aliases: HashMap<String, String>,
+    pub containers: HashMap<String, ContainerConfig>,
+    pub volumes: HashMap<String, String>,
+    pub aliases: HashMap<String, String>,
 }
 
 #[derive(Debug, DeriveDeserialize, DeriveSerialize)]
@@ -215,35 +214,7 @@ pub struct RuntimeConfig {
     pub config: Config,
 }
 
-#[derive(Error, Debug)]
-pub enum ContainerError {
-    #[error("unknown alias `{alias}`")]
-    UnknownAlias { alias: String },
-
-    #[error("unknown container `{container}` for alias `{alias}`")]
-    UnknownContainer { alias: String, container: String },
-}
-
 impl Config {
-    pub fn get_container_by_alias(&self, alias: &str) -> Result<&ContainerConfig, ContainerError> {
-        match self.aliases.get(alias) {
-            Some(name) => match self.containers.get(name) {
-                Some(container) => Ok(container),
-                None => Err(ContainerError::UnknownContainer {
-                    alias: alias.to_string(),
-                    container: name.to_string(),
-                }),
-            },
-            None => Err(ContainerError::UnknownAlias {
-                alias: alias.to_string(),
-            }),
-        }
-    }
-
-    pub fn containers(&self) -> HashMap<String, ContainerConfig> {
-        self.containers.clone()
-    }
-
     pub fn get_container_by_name(&self, name: &str) -> Option<ContainerConfig> {
         let container = self.containers.get(name);
         container.cloned()
