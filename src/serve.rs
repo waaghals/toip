@@ -43,7 +43,7 @@ impl Inner {
         let _size = stream.recv_vectored_with_ancillary(bufs, &mut ancillary)?;
         let message_size = u32::from_be_bytes([buf1[0], buf1[1], buf1[2], buf1[3]]) as usize;
         if message_size >= 1024 {
-            panic!("Message size to large for single buffer"); //TODO allow arbritary buffer size
+            panic!("Message size to large for single buffer"); // TODO allow arbritary buffer size
         }
 
         let info: CallInfo = serde_json::from_slice(&buf2[0..message_size])?;

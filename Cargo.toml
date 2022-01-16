@@ -7,8 +7,6 @@ name = "toip"
 version = "0.1.0"
 description = "Tool to install other tools as containers but run them as if they are installed regularly."
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 anyhow = "1.0"
 async-trait = "0.1.51"
@@ -34,21 +32,19 @@ tar = "0.4.37"
 termion = "1.5.6"
 thiserror = "1.0.26"
 tokio = {version = "1.8.1", features = ["rt", "rt-multi-thread", "net", "io-util", "macros", "process"]}
-# shellexpand = "2.0.0"
-# walkdir = "2.3.1"
 tokio-stream = {version = "0.1.7", features = ["net", "io-util"]}
 tokio-util = {version = "0.6.7", features = ["codec"]}
-# uds = {version="0.2.6"}
 tower = "0.4.11"
-tower-http = {version="0.2.0", features = ["follow-redirect", "decompression-full", "set-header", "trace", "util"]}
+tower-http = {version="0.2.0", features = ["follow-redirect", "decompression-full", "set-header", "trace", "util", "map-response-body"]}
 hyper = {version = "0.14.6", features = ["client", "http1", "http2", "runtime", "stream"]}
 http = "0.2.5"
 const_format = { version="0.2.22", features = ["fmt"] }
-# hyper-tls = "0.5.0"
 hyper-rustls = {version = "0.23.0", features = ["http2"]}
 itertools = "0.10.3"
 hyper-trust-dns-connector = "0.3.0"
 rm_rf = "0.6.1"
+indicatif = {version="0.16.2", features=["improved_unicode"]}
+progress-streams = "1.1.0"
 
 [profile.release]
 codegen-units = 1

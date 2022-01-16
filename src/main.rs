@@ -1,6 +1,7 @@
 #![feature(async_stream)]
 #![feature(unix_socket_ancillary_data)]
 #![feature(const_mut_refs)]
+#![feature(ready_macro)]
 
 use std::env;
 use std::fs::OpenOptions;
@@ -12,7 +13,6 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
 use serve::CallInfo;
-use tokio_stream::StreamExt;
 
 use crate::commands::call::call;
 use crate::commands::prepare::prepare;
@@ -28,6 +28,7 @@ mod image;
 mod logger;
 mod metadata;
 mod oci;
+mod progress_bar;
 mod runtime;
 mod serve;
 
@@ -49,6 +50,7 @@ enum Command {
         #[clap(short, long)]
         prepare: Option<bool>,
     },
+
     /// build and or pull containers
     Prepare {
         /// container name

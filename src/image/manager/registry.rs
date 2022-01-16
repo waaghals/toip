@@ -3,12 +3,15 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use flate2::read::GzDecoder;
+use indicatif::ProgressBar;
+use progress_streams::ProgressReader;
 use tar::Archive;
 
 use crate::config::RegistrySource;
 use crate::dirs;
 use crate::oci::distribution::{OciRegistry, Registry};
 use crate::oci::image::{Digest, Image};
+use crate::progress_bar::bytes_style;
 
 pub struct RegistryManager {
     client: OciRegistry,
@@ -43,16 +46,15 @@ impl RegistryManager {
         let mut diff_ids = image.rootfs.diff_ids.iter();
 
         for layer_descriptor in manifest.layers.iter() {
-            // TODO check if layer already extracted
             let diff_id = diff_ids.next().with_context(|| {
                 format!(
-                    "manifest `{}` references more layer then the image configuration contains",
+                    "manifest `{}` references more layers then the image configuration contains",
                     manifest.config.digest
                 )
             })?;
             let destination = destination(diff_id).with_context(|| {
                 format!(
-                    "could not determin layer destination for diff `{}`",
+                    "could not determine layer destination for diff `{}`",
                     diff_id
                 )
             })?;
@@ -71,7 +73,12 @@ impl RegistryManager {
                 .await?;
 
             // TODO find out why tars need to be decoded here, while they cannot seem to be decoded during downloading
-            let buffer = Cursor::new(blob);
+            let progress_bar = ProgressBar::new(layer_descriptor.size)
+                .with_message("Extracting")
+                .with_style(bytes_style());
+            let buffer = ProgressReader::new(Cursor::new(blob), |progress: usize| {
+                progress_bar.inc(progress as u64);
+            });
             let decompressed = GzDecoder::new(buffer);
             let mut tar = Archive::new(decompressed);
 
