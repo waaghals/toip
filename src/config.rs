@@ -1,4 +1,3 @@
-use std::collections::hash_map::Values;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::fs::File;
@@ -241,8 +240,8 @@ impl Config {
         }
     }
 
-    pub fn containers(&self) -> Values<String, ContainerConfig> {
-        self.containers.values()
+    pub fn containers(&self) -> HashMap<String, ContainerConfig> {
+        self.containers.clone()
     }
 
     pub fn get_container_by_name(&self, name: &str) -> Option<ContainerConfig> {

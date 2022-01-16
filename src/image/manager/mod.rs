@@ -6,9 +6,9 @@ use self::registry::RegistryManager;
 use crate::config::ImageSource;
 use crate::oci::image::Image;
 
-pub mod build;
-pub mod path;
-pub mod registry;
+mod build;
+mod path;
+mod registry;
 
 pub struct ImageManager {
     registry: RegistryManager,

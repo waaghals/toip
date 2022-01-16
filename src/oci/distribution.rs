@@ -1,28 +1,34 @@
 use std::env::consts::{ARCH, OS};
 use std::io::Read;
 use std::path::PathBuf;
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{ready, Context as TaskContext, Poll};
 use std::{fmt, fs};
 
 use anyhow::{anyhow, Context as AnyhowContext, Result};
 use async_trait::async_trait;
+use bytes::Bytes;
 use const_format::formatcp;
 use flate2::read::GzDecoder;
 use http::header::{ACCEPT, CONTENT_TYPE};
 use http::{header, HeaderValue, Method, Request};
-use hyper::Client;
+use hyper::body::{HttpBody, SizeHint};
+use hyper::client::HttpConnector;
+use hyper::{Body, Client};
+use hyper_rustls::HttpsConnector;
 use hyper_trust_dns_connector::{new_async_http_connector, AsyncHyperResolver};
+use indicatif::ProgressBar;
 use log;
 use metadata::{APPLICATION_NAME, HOMEPAGE, VERSION};
 use sha2::{Digest as ShaDigest, Sha256, Sha512};
 use thiserror::Error;
 use tokio::sync::Mutex;
 use tower::{Service, ServiceBuilder, ServiceExt};
-use tower_http::classify::StatusInRangeAsFailures;
-use tower_http::decompression::DecompressionLayer;
-use tower_http::follow_redirect::FollowRedirectLayer;
-use tower_http::set_header::SetRequestHeaderLayer;
-use tower_http::trace::{Trace, TraceLayer};
+use tower_http::decompression::{Decompression, DecompressionLayer};
+use tower_http::follow_redirect::{FollowRedirect, FollowRedirectLayer};
+use tower_http::map_response_body::{MapResponseBody, MapResponseBodyLayer};
+use tower_http::set_header::{SetRequestHeader, SetRequestHeaderLayer};
 
 use super::image::{
     Algorithm,
@@ -36,6 +42,7 @@ use super::image::{
 };
 use crate::dirs::blobs_dir;
 use crate::metadata;
+use crate::progress_bar::bytes_style;
 
 #[derive(Debug)]
 enum Context<'a> {
@@ -221,27 +228,68 @@ impl Registry for OciRegistry {
 pub struct TowerDownloader {
     client: Arc<
         Mutex<
-            Trace<
-                tower_http::set_header::request::SetRequestHeader<
-                    tower_http::decompression::Decompression<
-                        tower_http::follow_redirect::FollowRedirect<
-                            // hyper::client::Client<hyper::client::connect::HttpsConnector>,
-                            hyper::client::Client<
-                                // hyper_tls::HttpsConnector<hyper::client::connect::HttpConnector>,
-                                hyper_rustls::HttpsConnector<
-                                    hyper::client::connect::HttpConnector<AsyncHyperResolver>,
-                                >,
-                            >,
+            SetRequestHeader<
+                Decompression<
+                    FollowRedirect<
+                        MapResponseBody<
+                            Client<HttpsConnector<HttpConnector<AsyncHyperResolver>>>,
+                            fn(Body) -> ProgressBody,
                         >,
                     >,
-                    http::header::HeaderValue,
                 >,
-                tower_http::classify::SharedClassifier<
-                    tower_http::classify::StatusInRangeAsFailures,
-                >,
+                HeaderValue,
             >,
         >,
     >,
+}
+
+struct ProgressBody {
+    progress: ProgressBar,
+    inner: Body,
+}
+
+impl ProgressBody {
+    fn new(inner: Body) -> Self {
+        let progress = match inner.size_hint().upper() {
+            None => ProgressBar::new_spinner(),
+            Some(size) => ProgressBar::new(size)
+                .with_message("Downloading")
+                .with_style(bytes_style()),
+        };
+        Self { progress, inner }
+    }
+}
+
+impl HttpBody for ProgressBody {
+    type Data = Bytes;
+    type Error = hyper::Error;
+
+    fn poll_data(
+        mut self: Pin<&mut Self>,
+        cx: &mut TaskContext<'_>,
+    ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
+        if let Some(chunk) = ready!(Pin::new(&mut self.inner).poll_data(cx)?) {
+            self.progress.inc(chunk.len() as u64);
+            Poll::Ready(Some(Ok(chunk)))
+        } else {
+            Poll::Ready(None)
+        }
+    }
+
+    fn poll_trailers(
+        mut self: Pin<&mut Self>,
+        cx: &mut TaskContext<'_>,
+    ) -> Poll<Result<Option<hyper::HeaderMap>, Self::Error>> {
+        Pin::new(&mut self.inner).poll_trailers(cx)
+    }
+
+    fn is_end_stream(&self) -> bool {
+        self.inner.is_end_stream()
+    }
+
+    fn size_hint(&self) -> SizeHint {
+        self.inner.size_hint()
+    }
 }
 
 const USER_AGENT: &str = formatcp!("{}/{} ({})", APPLICATION_NAME, VERSION, HOMEPAGE);
@@ -259,15 +307,13 @@ impl Default for TowerDownloader {
         let hyper = Client::builder().build::<_, hyper::Body>(https);
 
         let client = ServiceBuilder::new()
-            .layer(TraceLayer::new(
-                StatusInRangeAsFailures::new(400..=599).into_make_classifier(),
-            ))
             .layer(SetRequestHeaderLayer::overriding(
                 header::USER_AGENT,
                 HeaderValue::from_static(USER_AGENT),
             ))
             .layer(DecompressionLayer::new())
             .layer(FollowRedirectLayer::new())
+            .layer(MapResponseBodyLayer::<fn(_) -> _>::new(ProgressBody::new))
             .service(hyper);
 
         TowerDownloader {

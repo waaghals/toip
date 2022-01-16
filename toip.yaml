@@ -14,20 +14,20 @@ containers:
     links:
       cowsay: cowsay_quay
       tuxsay: tuxsay_quay
-  sh_from_docker:
-    image: 'registry://ubuntu:latest'
-    cmd: [sh]
-    links:
-      cowsay: cowsay_quay
-      tuxsay: tuxsay_quay
-  cowsay_docker:
-    image: 'registry://rancher/cowsay'
-    cmd: [cowsay]
-    env:
-      COWSAY_ANIMAL: tux
-  cowsay_latest:
-    image: 'registry://quay.io/paper/cowsay:latest'
-    cmd: [cowsay]
+#  sh_from_docker:
+#    image: 'registry://ubuntu:latest'
+#    cmd: [sh]
+#    links:
+#      cowsay: cowsay_quay
+#      tuxsay: tuxsay_quay
+#  cowsay_docker:
+#    image: 'registry://rancher/cowsay'
+#    cmd: [cowsay]
+#    env:
+#      COWSAY_ANIMAL: tux
+#  cowsay_latest:
+#    image: 'registry://quay.io/paper/cowsay:latest'
+#    cmd: [cowsay]
   cowsay_quay:
     image: 'registry://quay.io/paper/cowsay@sha256:432bef5c9fd8e2e4dbc62cd18145f9a3b7f01b8db5195c59d7ddb6cc0facd744'
     cmd: [cowsay]
