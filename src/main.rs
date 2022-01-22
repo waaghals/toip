@@ -2,6 +2,7 @@
 #![feature(unix_socket_ancillary_data)]
 #![feature(const_mut_refs)]
 #![feature(ready_macro)]
+// #![deny(missing_docs)]
 
 use std::env;
 use std::fs::OpenOptions;
@@ -13,10 +14,7 @@ use clap::Parser;
 use serve::CallInfo;
 
 use crate::cli::{Cli, Command};
-use crate::command::call::call;
-use crate::command::inject::inject;
-use crate::command::prepare::prepare;
-use crate::command::run::run;
+use crate::command::{call, inject, install, prepare, run};
 use crate::oci::runtime::{OciCliRuntime, Runtime};
 use crate::runtime::generator::{RunGenerator, RuntimeBundleGenerator};
 use crate::serve::Serve;
@@ -58,6 +56,7 @@ async fn main() -> Result<()> {
                 .with_context(|| format!("could not call container `{}`", container_name))
         }
         Command::Prepare { container } => prepare(container).await,
+        Command::Install {} => install(),
         Command::Inject { shell } => inject(shell),
         _ => todo!(),
     }

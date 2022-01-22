@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 use clap_verbosity_flag::Verbosity;
 
 #[derive(Parser, Debug)]
@@ -15,6 +15,9 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
+    /// Install the configured aliases
+    Install {},
+
     /// Add the current configured aliases into the shell
     Inject {
         // shell injection script to generate
@@ -56,20 +59,65 @@ pub enum Command {
 #[derive(Subcommand, Debug)]
 pub enum Shell {
     /// Configuration for bash
+    ///
+    /// Add the following to ~/.bashrc
+    ///
+    ///    source <(toip inject bash [options])
+    ///
+    /// For example, to configure the $PATH variable
+    /// and to automatically install to containers;
+    /// add the following
+    ///
+    ///    source <(toip inject bash --export-path --auto-install)
+    #[clap(verbatim_doc_comment)]
     Bash {
-        #[clap(short, long)]
-        export_path: bool,
+        #[clap(flatten)]
+        delegate: InjectShell,
     },
 
     /// Configuration for fish
+    ///
+    /// Add the following to ~/.config/fish/config.fish
+    ///
+    ///    source (toip inject fish [options] | psub)
+    ///
+    /// For example, to configure the $PATH variable
+    /// and to automatically install to containers;
+    /// add the following
+    ///
+    ///    source (toip inject fish --export-path --auto-install | psub)
     Fish {
-        #[clap(short, long)]
-        export_path: bool,
+        #[clap(flatten)]
+        delegate: InjectShell,
     },
 
     /// Configuration for zsh
+    ///
+    /// Add the following to ~/.zshrc
+    ///
+    ///    source <(toip inject zsh [options])
+    ///
+    /// For example, to configure the $PATH variable
+    /// and to automatically install to containers;
+    /// add the following
+    ///
+    ///    source <(toip inject zsh --export-path --auto-install)
     Zsh {
-        #[clap(short, long)]
-        export_path: bool,
+        #[clap(flatten)]
+        delegate: InjectShell,
     },
+}
+#[derive(Debug, Args)]
+pub struct InjectShell {
+    /// Modify path variable
+    #[clap(short, long)]
+    pub export_path: bool,
+
+    /// Automatically install when changing directory
+    #[clap(short = 'i', long)]
+    pub auto_install: bool,
+
+    /// Automatically pull images when changing directory (not recommended)
+    #[clap(short = 'p', long)]
+    pub auto_pull: bool,
 }

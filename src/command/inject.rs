@@ -1,70 +1,95 @@
+use std::alloc::dealloc;
 use std::collections::VecDeque;
+use std::os::unix::fs as unix_fs;
 use std::path::{Path, PathBuf};
+use std::thread::current;
 use std::{env, fs};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use itertools::Itertools;
 
 use crate::cli::Shell;
 use crate::config::Config;
 use crate::{config, dirs, script};
 
-fn create_scripts<D>(directory: D, config: &Config) -> Result<()>
-where
-    D: Into<PathBuf>,
-{
-    let directory = directory.into();
+fn print_bash_compatible(export_path: bool, auto_install: bool, auto_pull: bool) -> Result<()> {
+    if export_path {
+        let path = dirs::path()?;
+        println!("export PATH={}:$PATH", path.display());
+    }
+
+    let mut calls = Vec::new();
     let current_exe = env::current_exe()?;
-    fs::create_dir_all(&directory)
-        .with_context(|| format!("could not create directory `{}`", directory.display()))?;
-    for (alias, container_name) in config.aliases.iter() {
-        let mut script_path = directory.clone();
-        script_path.push(&alias);
-        script::create_run(&script_path, &current_exe, &container_name).with_context(|| {
-            format!(
-                "could not create run script for directory `{}`",
-                directory.display()
-            )
-        })?;
+    let current_exe = current_exe.display();
+    if auto_install {
+        calls.push(format!("{} install", &current_exe));
+    }
+    if auto_pull {
+        calls.push(format!("{} pull", &current_exe));
+    }
+
+    if !calls.is_empty() {
+        print!(
+            r##"
+function _toip_hook {{
+  if [[ "$PREVPWD" != "$PWD" ]]; then
+{}
+  fi
+  # refresh last working dir record
+  export PREVPWD="$PWD"
+}}
+
+# add `;` after _toip_hook if PROMPT_COMMAND is not empty
+export PROMPT_COMMAND="_toip_hook${{PROMPT_COMMAND:+;$PROMPT_COMMAND}}"
+"##,
+            calls.iter().map(|l| format!("    {}", l)).join("\n")
+        );
     }
 
     Ok(())
 }
 
-fn modify_path<D>(script_dir: D) -> Result<()>
-where
-    D: AsRef<Path>,
-{
-    let path = script_dir.as_ref();
-    let path = path.to_str().with_context(|| {
-        format!(
-            "could not convert path `{}` into string representation",
-            path.display()
-        )
-    })?;
+fn print_fish(export_path: bool, auto_install: bool, auto_pull: bool) -> Result<()> {
+    if export_path {
+        let path = dirs::path()?;
+        println!("set PATH {} $PATH", path.display());
+    }
 
-    let current_path = env::var("PATH").context("environment variable `PATH` is not set")?;
-    let mut current: VecDeque<&str> = current_path.split(":").collect();
+    let mut calls = Vec::new();
+    let current_exe = env::current_exe()?;
+    let current_exe = current_exe.display();
+    if auto_install {
+        calls.push(format!("{} install", &current_exe));
+    }
+    if auto_pull {
+        calls.push(format!("{} pull", &current_exe));
+    }
 
-    let scripts_dir = dirs::scripts_dir()?;
-    let scripts_str = scripts_dir
-        .to_str()
-        .ok_or(anyhow!("cannot convert scripts directory to string"))?;
-    current.retain(|path| !path.starts_with(scripts_str));
-    current.push_front(path);
-
-    env::set_var("PATH", current.into_iter().join(":"));
+    if !calls.is_empty() {
+        print!(
+            r##"
+function _toip_hook --on-variable PWD {{
+{}
+}}
+"##,
+            calls.iter().map(|l| format!("    {}", l)).join("\n")
+        );
+    }
 
     Ok(())
 }
 
-pub fn inject(_shell: Shell) -> Result<()> {
-    let current_dir = env::current_dir()?;
-    let dir = dirs::script(&current_dir)?;
-    let config = config::from_dir(&current_dir)?;
-    create_scripts(&dir, &config)
-        .with_context(|| format!("could not create script in directory `{}`", dir.display()))?;
-    modify_path(dir).context("could not modify PATH variable")?;
-
-    Ok(())
+pub fn inject(shell: Shell) -> Result<()> {
+    match shell {
+        Shell::Bash { delegate } | Shell::Zsh { delegate } => print_bash_compatible(
+            delegate.export_path,
+            delegate.auto_install,
+            delegate.auto_pull,
+        ),
+        Shell::Fish { delegate } => print_fish(
+            delegate.export_path,
+            delegate.auto_install,
+            delegate.auto_pull,
+        ),
+    }
 }

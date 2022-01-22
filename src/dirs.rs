@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
-use directories::ProjectDirs;
+use directories::{BaseDirs, ProjectDirs};
 use sha2::{Digest, Sha256};
 
 use crate::metadata::{APPLICATION_NAME, ORGANIZATION, QUALIFIER};
@@ -88,10 +88,10 @@ where
 pub fn blobs_dir() -> Result<PathBuf> {
     cache_dir("blobs")
 }
-fn containers_dir() -> Result<PathBuf> {
+fn containers() -> Result<PathBuf> {
     state_dir("containers")
 }
-pub fn scripts_dir() -> Result<PathBuf> {
+pub fn scripts() -> Result<PathBuf> {
     state_dir("scripts")
 }
 
@@ -121,7 +121,7 @@ where
         .as_ref();
     let digest = format!("{:x}", Sha256::digest(data));
 
-    let mut dir: PathBuf = scripts_dir()?;
+    let mut dir: PathBuf = scripts()?;
     dir.push(digest);
     Ok(dir)
 }
@@ -130,7 +130,7 @@ pub fn container<C>(container_id: C) -> Result<PathBuf>
 where
     C: AsRef<Path>,
 {
-    let mut dir: PathBuf = containers_dir()?;
+    let mut dir: PathBuf = containers()?;
     dir.push(container_id);
     Ok(dir)
 }
@@ -141,4 +141,16 @@ pub fn socket_path() -> Result<PathBuf> {
 
 pub fn create(dir: &Path) -> anyhow::Result<()> {
     fs::create_dir_all(dir).with_context(|| format!("could not create directory `{:#?}`", dir))
+}
+
+pub fn path() -> Result<PathBuf> {
+    let dirs = BaseDirs::new().context("could not determine home directory")?;
+    let bin_dir = dirs
+        .executable_dir()
+        .context("could not determine binary directory")?;
+
+    let mut path_buf = bin_dir.to_path_buf();
+    path_buf.push(APPLICATION_NAME);
+
+    Ok(path_buf)
 }
