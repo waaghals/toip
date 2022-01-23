@@ -3,9 +3,9 @@ use std::convert::{TryFrom, TryInto};
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
-use std::{env, error, fmt};
+use std::{error, fmt};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use regex::Regex;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use serde_derive::{Deserialize as DeriveDeserialize, Serialize as DeriveSerialize};
@@ -13,6 +13,7 @@ use serde_derive::{Deserialize as DeriveDeserialize, Serialize as DeriveSerializ
 use crate::oci::image::Reference;
 
 const REGISTRY_PATTERN: &str = r"^(?:(?P<registry>(?:[a-zA-Z0-9]+\.[a-zA-Z0-9.]+?)|[a-zA-Z0-9]+\.)/)?(?P<repository>[a-z0-9][a-z0-9._-]*(?:/[a-z0-9][a-z0-9._-]*)?)(?:(?::(?P<tag>[a-zA-Z0-9_][a-zA-Z0-9._-]+))|@(?P<digest>[a-zA-Z0-9]+:[a-zA-Z0-9]+))?$";
+const CONFIG_FILE_NAME: &str = "toip.yaml";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RegistrySource {
@@ -219,27 +220,56 @@ impl Config {
         let container = self.containers.get(name);
         container.cloned()
     }
+
+    pub fn new<R>(read: R) -> Result<Config>
+    where
+        R: Read,
+    {
+        let mut buf_reader = BufReader::new(read);
+        let mut contents = String::new();
+        buf_reader
+            .read_to_string(&mut contents)
+            .context("unable to read config")?;
+
+        serde_yaml::from_str(&contents).context("unable to parse config")
+    }
+
+    pub fn new_from_dir<D>(dir: D) -> Result<Config>
+    where
+        D: Into<PathBuf>,
+    {
+        let mut path = dir.into();
+        path.push(CONFIG_FILE_NAME);
+
+        if !path.is_file() {
+            bail!("path `{}` is not an file", path.display());
+        }
+
+        let file = File::open(&path)
+            .with_context(|| format!("could not read configuration file `{}`", path.display()))?;
+
+        Config::new(&file)
+            .with_context(|| format!("could not parse configuration file `{}`", path.display()))
+    }
 }
 
-pub fn from_file(file_name: &Path) -> Result<Config> {
-    let file = File::open(file_name)
-        .with_context(|| format!("config file `{}` not found.", file_name.display()))?;
-    let mut buf_reader = BufReader::new(file);
-    let mut contents = String::new();
-    buf_reader
-        .read_to_string(&mut contents)
-        .with_context(|| format!("unable to read config file `{}`.", file_name.display()))?;
+pub fn find_config_file<P>(starting_dir: P) -> Option<PathBuf>
+where
+    P: Into<PathBuf>,
+{
+    let mut path: PathBuf = starting_dir.into();
+    let file_name = Path::new(CONFIG_FILE_NAME);
 
-    serde_yaml::from_str(&contents)
-        .with_context(|| format!("unable to parse config file `{}`.", file_name.display()))
-}
+    loop {
+        path.push(file_name);
 
-pub fn from_dir(dir: &Path) -> Result<Config> {
-    from_file(&dir.join("toip.yaml"))
-}
+        if path.is_file() {
+            break Some(path);
+        }
 
-pub fn from_current_dir() -> Result<Config> {
-    let dir = env::current_dir().context("could not determine current directory")?;
-    // config.validate()?;
-    self::from_dir(&dir)
+        if !(path.pop() && path.pop()) {
+            // remove file && remove parent
+            break None;
+        }
+    }
 }

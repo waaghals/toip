@@ -16,7 +16,11 @@ pub struct Cli {
 #[derive(Subcommand, Debug)]
 pub enum Command {
     /// Install the configured aliases
-    Install {},
+    Install {
+        /// Ignore missing configuration file
+        #[clap(short, long)]
+        ignore_missing: bool,
+    },
 
     /// Add the current configured aliases into the shell
     Inject {
@@ -30,20 +34,26 @@ pub enum Command {
         /// Container name
         #[clap(short, long)]
         container: Option<String>,
+
+        /// Ignore missing configuration file
+        #[clap(short, long)]
+        ignore_missing: bool,
     },
 
-    /// Run a container for a given alias
+    /// Run a container
     Run {
-        /// Alias to run
-        alias: String,
+        /// Configuration script
+        #[clap(parse(from_os_str))]
+        script: PathBuf,
         /// Argument to call the container with
         args: Vec<String>,
     },
 
-    /// Run a linked container
+    /// Run a linked container from another container
     Call {
+        /// Configuration script
         #[clap(parse(from_os_str))]
-        file_path: PathBuf,
+        script: PathBuf,
         /// Argument to call the container with
         args: Vec<String>,
     },
@@ -117,7 +127,7 @@ pub struct InjectShell {
     #[clap(short = 'i', long)]
     pub auto_install: bool,
 
-    /// Automatically pull images when changing directory (not recommended)
+    /// Automatically pull and/or build images when changing directory (not recommended)
     #[clap(short = 'p', long)]
-    pub auto_pull: bool,
+    pub auto_prepare: bool,
 }

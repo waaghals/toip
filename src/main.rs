@@ -5,8 +5,6 @@
 // #![deny(missing_docs)]
 
 use std::env;
-use std::fs::OpenOptions;
-use std::io::{BufRead, BufReader};
 use std::process::{self};
 
 use anyhow::{Context, Result};
@@ -39,24 +37,19 @@ async fn main() -> Result<()> {
     log::trace!("current pid is `{}`", process::id());
 
     match cli.command {
-        Command::Run { alias, args } => run(alias, args).await,
-        Command::Call { file_path, args } => {
-            let file = OpenOptions::new().read(true).write(true).open(&file_path)?;
-
-            let container_name = BufReader::new(file).lines().last().with_context(|| {
-                format!(
-                    "could not read container name from file `{}`",
-                    file_path.display()
-                )
-            })??;
-
+        Command::Run { script, args } => run(script, args).await,
+        Command::Call { script, args } => {
+            let container_name = script::read_container(script)?;
             let socket_path = env::var("TOIP_SOCK")
                 .context("environment variable `TOIP_SOCK` does not exists")?;
             call(socket_path, &container_name, args)
                 .with_context(|| format!("could not call container `{}`", container_name))
         }
-        Command::Prepare { container } => prepare(container).await,
-        Command::Install {} => install(),
+        Command::Prepare {
+            container,
+            ignore_missing,
+        } => prepare(ignore_missing, container).await,
+        Command::Install { ignore_missing } => install(ignore_missing),
         Command::Inject { shell } => inject(shell),
         _ => todo!(),
     }
