@@ -2,26 +2,23 @@
 #![feature(unix_socket_ancillary_data)]
 #![feature(const_mut_refs)]
 #![feature(ready_macro)]
+// #![deny(missing_docs)]
 
 use std::env;
-use std::fs::OpenOptions;
-use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
 use std::process::{self};
 
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
-use clap_verbosity_flag::Verbosity;
+use clap::Parser;
 use serve::CallInfo;
 
-use crate::commands::call::call;
-use crate::commands::prepare::prepare;
-use crate::commands::run::run;
+use crate::cli::{Cli, Command};
+use crate::command::{call, inject, install, prepare, run};
 use crate::oci::runtime::{OciCliRuntime, Runtime};
 use crate::runtime::generator::{RunGenerator, RuntimeBundleGenerator};
 use crate::serve::Serve;
 
-mod commands;
+mod cli;
+mod command;
 mod config;
 mod dirs;
 mod image;
@@ -30,57 +27,8 @@ mod metadata;
 mod oci;
 mod progress_bar;
 mod runtime;
+mod script;
 mod serve;
-
-#[derive(Parser, Debug)]
-#[clap(version, author, about)]
-struct Cli {
-    #[clap(flatten)]
-    verbose: Verbosity,
-
-    #[clap(subcommand)]
-    command: Command,
-}
-
-#[derive(Subcommand, Debug)]
-enum Command {
-    /// add the current configured aliases into the shell
-    Inject {
-        /// prepare containers
-        #[clap(short, long)]
-        prepare: Option<bool>,
-    },
-
-    /// build and or pull containers
-    Prepare {
-        /// container name
-        #[clap(short, long)]
-        container: Option<String>,
-    },
-
-    /// run a container for a given alias
-    Run {
-        /// alias to run
-        alias: String,
-        /// argument to call the container with
-        args: Vec<String>,
-    },
-
-    /// run a linked container
-    Call {
-        #[clap(parse(from_os_str))]
-        file_path: PathBuf,
-        /// argument to call the container with
-        args: Vec<String>,
-    },
-
-    /// remove cache and/or containers
-    Clean {
-        /// remove containers
-        #[clap(short, long)]
-        containers: bool,
-    },
-}
 
 #[tokio::main()]
 async fn main() -> Result<()> {
@@ -89,23 +37,20 @@ async fn main() -> Result<()> {
     log::trace!("current pid is `{}`", process::id());
 
     match cli.command {
-        Command::Run { alias, args } => run(alias, args).await,
-        Command::Call { file_path, args } => {
-            let file = OpenOptions::new().read(true).write(true).open(&file_path)?;
-
-            let container_name = BufReader::new(file).lines().last().with_context(|| {
-                format!(
-                    "could not read container name from file `{}`",
-                    file_path.display()
-                )
-            })??;
-
+        Command::Run { script, args } => run(script, args).await,
+        Command::Call { script, args } => {
+            let container_name = script::read_container(script)?;
             let socket_path = env::var("TOIP_SOCK")
                 .context("environment variable `TOIP_SOCK` does not exists")?;
             call(socket_path, &container_name, args)
                 .with_context(|| format!("could not call container `{}`", container_name))
         }
-        Command::Prepare { container } => prepare(container).await,
-        _ => Ok(()),
+        Command::Prepare {
+            container,
+            ignore_missing,
+        } => prepare(ignore_missing, container).await,
+        Command::Install { ignore_missing } => install(ignore_missing),
+        Command::Inject { shell } => inject(shell),
+        _ => todo!(),
     }
 }

@@ -1,5 +1,6 @@
 use std::fs;
 use std::os::unix::io::FromRawFd;
+use std::path::Path;
 use std::process::Stdio;
 
 use anyhow::{Context, Result};
@@ -10,11 +11,25 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::StreamExt;
 
-use crate::commands::call::call;
-use crate::{config, dirs, OciCliRuntime, RunGenerator, Runtime, RuntimeBundleGenerator, Serve};
+use crate::command::call::call;
+use crate::config::Config;
+use crate::{dirs, script, OciCliRuntime, RunGenerator, Runtime, RuntimeBundleGenerator, Serve};
 
-pub async fn run(alias: String, args: Vec<String>) -> Result<()> {
-    let config = config::from_current_dir()?;
+pub async fn run<P>(script_path: P, args: Vec<String>) -> Result<()>
+where
+    P: AsRef<Path>,
+{
+    let script_path = script_path.as_ref();
+    let container_name = script::read_container(script_path)
+        .with_context(|| format!("could not read script file `{}`", script_path.display()))?;
+
+    let script_dir = script_path.parent().with_context(|| {
+        format!(
+            "could not determine config directory from script file `{}`",
+            script_path.display()
+        )
+    })?;
+    let config = Config::new_from_dir(script_dir)?;
     let runtime = OciCliRuntime::default();
     let runtime_generator = RunGenerator::default();
 
@@ -44,9 +59,13 @@ pub async fn run(alias: String, args: Vec<String>) -> Result<()> {
         // TODO pass a 'ready' signal through the receiverStream and send the call when it is received.
         std::thread::sleep(std::time::Duration::from_millis(100));
         // TODO find container name for alias
-        log::debug!("calling `{}` with arguments `{}`", alias, args.join(", "));
-        call(&call_socket, &alias, args)
-            .with_context(|| format!("could not call container `{}`", alias))
+        log::debug!(
+            "calling `{}` with arguments `{}`",
+            container_name,
+            args.join(", ")
+        );
+        call(&call_socket, &container_name, args)
+            .with_context(|| format!("could not call container `{}`", container_name))
     });
 
     // Handle each call instruction
