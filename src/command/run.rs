@@ -9,7 +9,6 @@ use itertools::join;
 use rand::distributions::Alphanumeric;
 use rand::{self, Rng};
 use tokio::sync::mpsc;
-use tokio::task::JoinHandle;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::StreamExt;
 use tokio_util::sync::CancellationToken;
@@ -41,7 +40,7 @@ where
     // Start listening for incoming calls
     let socket = dirs::socket_path().context("could not determine socket path")?;
     let cancellation_token = CancellationToken::new();
-    let mut server = Serve::new(cancellation_token.clone(), &socket, tx);
+    let server = Serve::new(cancellation_token.clone(), &socket, tx);
 
     let socket_dir = socket.parent().with_context(|| {
         format!(
@@ -76,7 +75,10 @@ where
     let mut container_handles = FuturesUnordered::new();
     // Handle each call instruction
     let mut call_instruction_stream = ReceiverStream::new(rx);
-    call_handle.await??;
+    call_handle
+        .await
+        .context("could not join call thread")?
+        .context("could not perform call")?;
 
     let mut cancellation_handle = None;
 
@@ -119,7 +121,7 @@ where
                             ci_socket,
                         )
                         .await
-                        .unwrap();
+                        .context("was not able to generate runtime bundle")?;
 
                     // Ensure the the new Stdio instance are the sole owners of the file descriptors.
                     // i.e. no other code must consume the instructions.file_descriptors
@@ -133,20 +135,18 @@ where
 
                         runtime
                             .run(&container_id, &bundle_path, stdin, stdout, stderr)
-                            .unwrap();
+                            .with_context(|| {
+                                format!("could not run container from `{}`", bundle_path.display())
+                            })?;
                         log::debug!("runtime finished running container `{}`", container_id);
-
-                        // TODO close file descriptors?
                     }
 
                     log::info!("removing bundle path `{}`", bundle_path.display());
 
                     // TODO find out why work directory within the workdir is non executable
-                    rm_rf::remove(&bundle_path)
-                        .with_context(|| {
-                            format!("could not remove directory `{}`", bundle_path.display())
-                        })
-                        .unwrap();
+                    rm_rf::remove(&bundle_path).with_context(|| {
+                        format!("could not remove directory `{}`", bundle_path.display())
+                    })
                 }
                 None => todo!(),
             }
@@ -158,7 +158,10 @@ where
             let cancellation_token = cancellation_token.clone();
             // Await the origin handle in a separate thread so we don't block the instructions loop
             let handle = tokio::spawn(async move {
-                let result = container_handle.await;
+                let result = container_handle
+                    .await
+                    .context("could not join origin container thread")?
+                    .context("failure during origin container invocation");
                 // Wait for the origin container to complete, then stop the listener.
                 // When the listener is stopped, it will also terminate the instruction stream
                 // which breaks this while loop and allows us to tear everything down
@@ -172,24 +175,28 @@ where
     }
 
     if let Some(handle) = cancellation_handle {
-        handle.await??;
+        handle
+            .await
+            .context("could not join cancellation thread")?
+            .context("failure during cancellation thread")?;
     }
 
     log::debug!("Instruction stream ended");
-    server_handle.await??;
+    server_handle
+        .await
+        .context("could not join server thread")?
+        .context("could not initialize call listener")?;
+
     log::info!("removing socket `{}`", socket.display());
     fs::remove_file(&socket)
         .with_context(|| format!("could not delete socket `{}`", socket.display()))?;
 
     while let Some(finished_container) = container_handles.next().await {
-        match finished_container {
-            Ok(_) => {
-                log::info!("Container finished executing!")
-            }
-            Err(error) => {
-                log::error!("Container went boom: `{}`", error)
-            }
-        }
+        finished_container
+            .context("could not join container thread")?
+            .context("failure from container thread")?;
+
+        log::info!("Container finished executing");
     }
     log::debug!("All containers threads finished executing");
 

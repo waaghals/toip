@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::future::Future;
 use std::io::IoSliceMut;
 use std::os::unix::net::{AncillaryData, SocketAncillary, UnixStream};
 use std::os::unix::prelude::RawFd;
@@ -8,11 +7,10 @@ use std::str;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use futures_util::{FutureExt, StreamExt};
+use futures_util::StreamExt;
 use itertools::join;
 use serde_derive::{Deserialize, Serialize};
 use tokio::net::UnixListener;
-use tokio::select;
 use tokio::sync::mpsc::Sender;
 use tokio_stream::wrappers::UnixListenerStream;
 use tokio_util::sync::CancellationToken;
