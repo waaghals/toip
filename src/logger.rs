@@ -22,7 +22,7 @@ pub fn init(level: Option<Level>) -> Result<()> {
         .build();
 
     TermLogger::init(
-        level_filter(level),
+        LevelFilter::Debug, // level_filter(level),
         config,
         TerminalMode::Stderr,
         ColorChoice::Auto,
