@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::io::IoSliceMut;
 use std::os::unix::net::{AncillaryData, SocketAncillary, UnixStream};
 use std::os::unix::prelude::RawFd;
-use std::path::PathBuf;
+use std::path::Path;
 use std::str;
 use std::sync::Arc;
 
@@ -77,40 +77,19 @@ impl Inner {
     }
 }
 
-pub struct Serve {
+pub struct Server {
     cancellation_token: CancellationToken,
-    socket_path: PathBuf,
+    listener_stream: UnixListenerStream,
     inner: Arc<Inner>,
 }
 
-impl Serve {
-    pub fn new<S>(
-        cancellation_token: CancellationToken,
-        socket_path: S,
-        sender: Sender<Call>,
-    ) -> Self
-    where
-        S: Into<PathBuf>,
-    {
-        Self {
-            cancellation_token,
-            socket_path: socket_path.into(),
-            inner: Arc::new(Inner { sender }),
-        }
-    }
-
-    pub async fn listen(&self) -> Result<()> {
-        let path = self.socket_path.to_string_lossy();
-        log::info!("listening on `{}`", path);
-        let listener = UnixListener::bind(&self.socket_path)
-            .with_context(|| format!("could not listen on socket `{}`", path))?;
-
-        let mut unix_stream = UnixListenerStream::new(listener);
+impl Server {
+    pub async fn listen(mut self) -> Result<()> {
         let cancellation_token = &self.cancellation_token;
+
         loop {
             tokio::select! {
-                _ = cancellation_token.cancelled() => break,
-                Some(incoming) = unix_stream.next() => {
+                Some(incoming) = self.listener_stream.next() => {
                     let stream = incoming?;
 
                     let inner = self.inner.clone();
@@ -121,14 +100,35 @@ impl Serve {
                         .context("could not convert Tokio's UnixStream to std's UnixStream")?;
                     inner.handle(std_stream).await?;
                 },
+                _ = cancellation_token.cancelled() => break,
                 else => break,
             }
         }
 
-        log::info!(
-            "stopped listening on `{}`",
-            self.socket_path.to_string_lossy()
-        );
+        log::info!("stopped listening on call socket");
         Ok(())
     }
+}
+
+pub fn create<S>(
+    socket_path: S,
+    sender: Sender<Call>,
+    cancellation_token: CancellationToken,
+) -> Result<Server>
+where
+    S: AsRef<Path>,
+{
+    let socket_path = socket_path.as_ref();
+    let path = socket_path.to_string_lossy();
+    log::info!("listening on `{}`", path);
+    let listener = UnixListener::bind(socket_path)
+        .with_context(|| format!("could not listen on socket `{}`", path))?;
+
+    let unix_stream = UnixListenerStream::new(listener);
+
+    Ok(Server {
+        cancellation_token,
+        listener_stream: unix_stream,
+        inner: Arc::new(Inner { sender }),
+    })
 }
