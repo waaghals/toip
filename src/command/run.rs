@@ -15,7 +15,16 @@ use tokio_util::sync::CancellationToken;
 
 use crate::command::call::call;
 use crate::config::Config;
-use crate::{dirs, script, OciCliRuntime, RunGenerator, Runtime, RuntimeBundleGenerator, Serve};
+use crate::{
+    dirs,
+    script,
+    server,
+    OciCliRuntime,
+    RunGenerator,
+    Runtime,
+    RuntimeBundleGenerator,
+    Server,
+};
 
 pub async fn run<P>(script_path: P, args: Vec<String>) -> Result<()>
 where
@@ -40,8 +49,6 @@ where
     // Start listening for incoming calls
     let socket = dirs::socket_path().context("could not determine socket path")?;
     let cancellation_token = CancellationToken::new();
-    let server = Serve::new(cancellation_token.clone(), &socket, tx);
-
     let socket_dir = socket.parent().with_context(|| {
         format!(
             "could not determine socket directory `{}`",
@@ -50,19 +57,14 @@ where
     })?;
     fs::create_dir_all(socket_dir)
         .with_context(|| format!("could not create directory `{}`", socket_dir.display()))?;
-    // TODO improve error handling in the threads below
-    let server_handle = tokio::spawn(async move {
-        let res = server.listen().await;
-        res
-    });
+    let serve_socket = socket.clone();
+    let server = server::create(serve_socket, tx, cancellation_token.clone())
+        .context("could not setup call listener")?;
 
     // Call the setup listener to start the initial container
     let call_socket = socket.clone();
     let origin_container_name = &container_name.clone();
     let call_handle = tokio::spawn(async move {
-        // TODO pass a 'ready' signal through the receiverStream and send the call when it is received.
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        // TODO find container name for alias
         log::debug!(
             "calling `{}` with arguments `{}`",
             &container_name,
@@ -70,6 +72,10 @@ where
         );
         call(&call_socket, &container_name, args)
             .with_context(|| format!("could not call container `{}`", container_name))
+    });
+    let server_handle = tokio::spawn(async move {
+        let res = server.listen().await;
+        res
     });
 
     let mut container_handles = FuturesUnordered::new();

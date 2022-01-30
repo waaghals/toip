@@ -9,13 +9,13 @@ use std::process::{self};
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use serve::CallInfo;
+use server::CallInfo;
 
 use crate::cli::{Cli, Command};
 use crate::command::{call, inject, install, prepare, run};
 use crate::oci::runtime::{OciCliRuntime, Runtime};
 use crate::runtime::generator::{RunGenerator, RuntimeBundleGenerator};
-use crate::serve::Serve;
+use crate::server::Server;
 
 mod cli;
 mod command;
@@ -28,7 +28,7 @@ mod oci;
 mod progress_bar;
 mod runtime;
 mod script;
-mod serve;
+mod server;
 
 #[tokio::main()]
 async fn main() -> Result<()> {
