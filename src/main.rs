@@ -15,7 +15,6 @@ use crate::cli::{Cli, Command};
 use crate::command::{call, inject, install, prepare, run};
 use crate::oci::runtime::{OciCliRuntime, Runtime};
 use crate::runtime::generator::{RunGenerator, RuntimeBundleGenerator};
-use crate::server::Server;
 
 mod cli;
 mod command;

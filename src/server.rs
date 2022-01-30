@@ -1,9 +1,8 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::IoSliceMut;
 use std::os::unix::net::{AncillaryData, SocketAncillary, UnixStream};
 use std::os::unix::prelude::RawFd;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str;
 use std::sync::Arc;
 
@@ -106,7 +105,7 @@ impl Server {
             }
         }
 
-        // log::info!("stopped listening on `{}`", socket_path.to_string_lossy());
+        log::info!("stopped listening on call socket");
         Ok(())
     }
 }

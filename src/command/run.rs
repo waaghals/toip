@@ -15,16 +15,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::command::call::call;
 use crate::config::Config;
-use crate::{
-    dirs,
-    script,
-    server,
-    OciCliRuntime,
-    RunGenerator,
-    Runtime,
-    RuntimeBundleGenerator,
-    Server,
-};
+use crate::{dirs, script, server, OciCliRuntime, RunGenerator, Runtime, RuntimeBundleGenerator};
 
 pub async fn run<P>(script_path: P, args: Vec<String>) -> Result<()>
 where
