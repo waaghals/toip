@@ -46,8 +46,8 @@ impl fmt::Display for PathSource {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BuildSource {
-    container_file: Option<PathBuf>,
-    context: PathBuf,
+    pub container_file: Option<PathBuf>,
+    pub context: PathBuf,
 }
 
 impl fmt::Display for BuildSource {
@@ -64,7 +64,6 @@ impl fmt::Display for BuildSource {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ImageSource {
     Registry(RegistrySource),
-    Path(PathSource),
     Build(BuildSource),
 }
 
@@ -131,9 +130,6 @@ impl TryFrom<&str> for ImageSource {
         } else if let Some(part) = value.strip_prefix("build://") {
             let config = part.try_into()?;
             Ok(ImageSource::Build(config))
-        } else if let Some(part) = value.strip_prefix("path://") {
-            let config = part.try_into()?;
-            Ok(ImageSource::Path(config))
         } else {
             Err(ParseImageError::UnknownScheme)
         }
@@ -144,7 +140,6 @@ impl fmt::Display for ImageSource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ImageSource::Registry(registry) => write!(f, "registry://{}", registry),
-            ImageSource::Path(path) => write!(f, "path://{}", path),
             ImageSource::Build(build) => write!(f, "build://{}", build),
         }
     }

@@ -9,7 +9,7 @@ description = "Tool to install other tools as containers but run them as if they
 
 [dependencies]
 anyhow = "1.0"
-async-trait = "0.1.51"
+async-trait = "0.1.52"
 bytes = "1.0.1"
 clap-verbosity-flag = "0.4.0"
 directories = "4.0.1"

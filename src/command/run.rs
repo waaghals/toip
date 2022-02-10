@@ -6,16 +6,15 @@ use std::process::Stdio;
 use anyhow::{Context, Result};
 use futures_util::stream::FuturesUnordered;
 use itertools::join;
-use rand::distributions::Alphanumeric;
-use rand::{self, Rng};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::StreamExt;
 use tokio_util::sync::CancellationToken;
 
+use crate::backend::{Backend, Docker};
 use crate::command::call::call;
 use crate::config::Config;
-use crate::{dirs, script, server, OciCliRuntime, RunGenerator, Runtime, RuntimeBundleGenerator};
+use crate::{dirs, script, server, OciCliRuntime, RunGenerator};
 
 pub async fn run<P>(script_path: P, args: Vec<String>) -> Result<()>
 where
@@ -83,69 +82,37 @@ where
     // tx is dropped whenever server is dropped
     while let Some(instruction) = call_instruction_stream.next().await {
         let call_container_name = instruction.info.name.clone();
-        let runtime_generator = runtime_generator.clone();
-        let runtime = runtime.clone();
+
+        let _runtime_generator = runtime_generator.clone();
+        let _runtime = runtime.clone();
         let config = config.clone();
         log::trace!(
             "received file descriptors `{}`",
             join(&instruction.file_descriptors, ", ")
         );
 
-        let ci_socket = socket.clone();
+        let _ci_socket = socket.clone();
         let container_handle = tokio::spawn(async move {
             log::debug!("received call for container `{}`", instruction.info.name);
-            let container_option = config.get_container_by_name(&instruction.info.name);
 
-            match container_option {
-                Some(container) => {
-                    let container_id: String = rand::thread_rng()
-                        .sample_iter(&Alphanumeric)
-                        .take(30)
-                        .map(char::from)
-                        .collect();
+            let docker = Docker::new();
+            let name = &instruction.info.name;
+            let container_option = config.get_container_by_name(name);
+            let container_config =
+                container_option.with_context(|| format!("No container name `{}`", name))?;
 
-                    log::info!(
-                        "running `{:#?}` in container `{}`",
-                        container.cmd,
-                        container_id
-                    );
+            let image = docker.prepare(container_config).await?;
+            // Ensure the the new Stdio instance are the sole owners of the file descriptors.
+            // i.e. no other code must consume the instructions.file_descriptors
+            unsafe {
+                let stdin = Stdio::from_raw_fd(instruction.file_descriptors[0]);
+                let stdout = Stdio::from_raw_fd(instruction.file_descriptors[1]);
+                let stderr = Stdio::from_raw_fd(instruction.file_descriptors[2]);
 
-                    let bundle_path = runtime_generator
-                        .build(
-                            &container_id,
-                            &container,
-                            instruction.info.arguments,
-                            ci_socket,
-                        )
-                        .await
-                        .context("was not able to generate runtime bundle")?;
+                // Drop file_descriptors from above so they cannot be used elsewhere
+                drop(instruction.file_descriptors);
 
-                    // Ensure the the new Stdio instance are the sole owners of the file descriptors.
-                    // i.e. no other code must consume the instructions.file_descriptors
-                    unsafe {
-                        let stdin = Stdio::from_raw_fd(instruction.file_descriptors[0]);
-                        let stdout = Stdio::from_raw_fd(instruction.file_descriptors[1]);
-                        let stderr = Stdio::from_raw_fd(instruction.file_descriptors[2]);
-
-                        // Drop file_descriptors from above so they cannot be used elsewhere
-                        drop(instruction.file_descriptors);
-
-                        runtime
-                            .run(&container_id, &bundle_path, stdin, stdout, stderr)
-                            .with_context(|| {
-                                format!("could not run container from `{}`", bundle_path.display())
-                            })?;
-                        log::debug!("runtime finished running container `{}`", container_id);
-                    }
-
-                    log::info!("removing bundle path `{}`", bundle_path.display());
-
-                    // TODO find out why work directory within the workdir is non executable
-                    rm_rf::remove(&bundle_path).with_context(|| {
-                        format!("could not remove directory `{}`", bundle_path.display())
-                    })
-                }
-                None => todo!(),
+                docker.spawn(image, stdin, stdout, stderr).await
             }
         });
 

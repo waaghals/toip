@@ -32,10 +32,6 @@ impl ImageManager {
                 let image = self.registry.pull(source).await?;
                 Ok(image)
             }
-            ImageSource::Path(source) => {
-                let image = self.path.convert(source).await?;
-                Ok(image)
-            }
             ImageSource::Build(source) => {
                 let image = self.build.build(source).await?;
                 Ok(image)
