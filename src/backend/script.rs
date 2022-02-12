@@ -42,20 +42,20 @@ where
     Ok(())
 }
 
-pub fn create_call<D, B>(destination: D, binary: B, container_name: &str) -> Result<()>
+pub fn create_call<D, B>(destination: D, binary: B, target: &str) -> Result<()>
 where
     D: AsRef<Path>,
     B: AsRef<Path>,
 {
-    create(destination, binary, "call", container_name)
+    create(destination, binary, "call", target)
 }
 
-pub fn create_run<D, B>(destination: D, binary: B, container_name: &str) -> Result<()>
+pub fn create_run<D, B>(destination: D, binary: B, target: &str) -> Result<()>
 where
     D: AsRef<Path>,
     B: AsRef<Path>,
 {
-    create(destination, binary, "run", container_name)
+    create(destination, binary, "run", target)
 }
 
 pub fn read_container<P>(path: P) -> Result<String>

@@ -8,6 +8,7 @@ use std::env;
 use std::process::{self};
 
 use anyhow::{Context, Result};
+use backend::script;
 use clap::Parser;
 use server::CallInfo;
 
@@ -27,7 +28,6 @@ mod metadata;
 mod oci;
 mod progress_bar;
 mod runtime;
-mod script;
 mod server;
 
 #[tokio::main()]

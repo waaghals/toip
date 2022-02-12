@@ -5,8 +5,9 @@ use std::{env, fs};
 
 use anyhow::{anyhow, bail, Context, Result};
 
+use crate::backend::script;
 use crate::config::Config;
-use crate::{config, dirs, script};
+use crate::{config, dirs};
 
 fn create_scripts<D>(directory: D, config: &Config) -> Result<()>
 where
@@ -39,7 +40,7 @@ where
         "Pointing scripts lookup directory to `{}`",
         target_dir_display
     );
-    let bin_dir = dirs::path().context("could not determine bin dir")?;
+    let bin_dir = dirs::path().context("could not determine bin backend")?;
 
     if let Some(parent) = bin_dir.parent() {
         if !parent.exists() {

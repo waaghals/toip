@@ -17,11 +17,12 @@ use oci_spec::{
     Spec,
 };
 
+use crate::backend::script;
 use crate::config::ContainerConfig;
+use crate::dirs;
 use crate::image::manager::ImageManager;
 use crate::metadata::APPLICATION_NAME;
 use crate::oci::image::Image;
-use crate::{dirs, script};
 
 const CONTAINER_BIN_DIR: &str = formatcp!("/usr/bin/{}", APPLICATION_NAME);
 const CONTAINER_BINARY: &str = formatcp!("{}/{}", CONTAINER_BIN_DIR, APPLICATION_NAME);

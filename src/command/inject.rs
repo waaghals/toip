@@ -29,7 +29,7 @@ function _toip_hook {{
   if [[ "$PREVPWD" != "$PWD" ]]; then
 {}
   fi
-  # refresh last working dir record
+  # refresh last working backend record
   export PREVPWD="$PWD"
 }}
 

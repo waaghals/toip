@@ -11,10 +11,11 @@ use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::StreamExt;
 use tokio_util::sync::CancellationToken;
 
-use crate::backend::{Backend, Docker};
+use crate::backend::driver::Docker;
+use crate::backend::{script, Backend};
 use crate::command::call::call;
 use crate::config::Config;
-use crate::{dirs, script, server, OciCliRuntime, RunGenerator};
+use crate::{dirs, server, OciCliRuntime, RunGenerator};
 
 pub async fn run<P>(script_path: P, args: Vec<String>) -> Result<()>
 where
@@ -91,17 +92,17 @@ where
             join(&instruction.file_descriptors, ", ")
         );
 
-        let _ci_socket = socket.clone();
+        let call_socket = socket.clone();
         let container_handle = tokio::spawn(async move {
             log::debug!("received call for container `{}`", instruction.info.name);
 
-            let docker = Docker::new();
+            let backend = Backend::new("docker", call_socket, Docker::default());
             let name = &instruction.info.name;
             let container_option = config.get_container_by_name(name);
             let container_config =
                 container_option.with_context(|| format!("No container name `{}`", name))?;
 
-            let image = docker.prepare(container_config).await?;
+            let image = backend.prepare(&container_config).await?;
             // Ensure the the new Stdio instance are the sole owners of the file descriptors.
             // i.e. no other code must consume the instructions.file_descriptors
             unsafe {
@@ -112,7 +113,9 @@ where
                 // Drop file_descriptors from above so they cannot be used elsewhere
                 drop(instruction.file_descriptors);
 
-                docker.spawn(image, stdin, stdout, stderr).await
+                backend
+                    .spawn(image, &container_config, stdin, stdout, stderr)
+                    .await
             }
         });
 
