@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use const_format::formatcp;
 use tokio::process::Command;
 
-use crate::backend::driver::{Docker, Driver};
+use crate::backend::driver::{DockerCliCompatible, Driver};
 use crate::config::{ContainerConfig, ImageSource, RegistrySource};
 use crate::dirs;
 use crate::metadata::APPLICATION_NAME;

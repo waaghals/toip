@@ -3,13 +3,13 @@ use std::fs::File;
 
 use anyhow::{bail, Context, Result};
 
-use crate::backend::driver::Docker;
+use crate::backend::driver::DockerCliCompatible;
 use crate::backend::Backend;
 use crate::config::{find_config_file, Config};
 use crate::image::manager::ImageManager;
 
 async fn prepare_config(config: &Config, container: Option<String>) -> Result<()> {
-    let backend = Backend::<Docker>::default();
+    let backend = Backend::<DockerCliCompatible>::default();
     match container {
         Some(name) => {
             let container = config

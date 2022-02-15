@@ -11,7 +11,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::StreamExt;
 use tokio_util::sync::CancellationToken;
 
-use crate::backend::driver::Docker;
+use crate::backend::driver::DockerCliCompatible;
 use crate::backend::{script, Backend};
 use crate::command::call::call;
 use crate::config::{find_config_file, Config};
@@ -100,7 +100,7 @@ where
         let container_handle = tokio::spawn(async move {
             log::debug!("received call for container `{}`", instruction.info.name);
 
-            let backend = Backend::new("docker", call_socket, Docker::default());
+            let backend = Backend::new("docker", call_socket, DockerCliCompatible::default());
             let name = &instruction.info.name;
             let container_option = config.get_container_by_name(name);
             let container_config =

@@ -4,17 +4,21 @@ use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
+use clap::arg;
+use itertools::Itertools;
 use regex::Regex;
 use tokio::process::Command;
+use which::which;
 
 use crate::backend::{BuildArg, Driver, EnvVar, Image, Mount, MountType, Secret, Ssh};
 use crate::config::{ContainerConfig, ImageSource, RegistrySource};
 use crate::oci::image::Reference;
 
-pub struct Docker {
+pub struct DockerCliCompatible {
     binary: PathBuf,
+    argument: Option<PathBuf>,
     socket: Option<PathBuf>,
 }
 
@@ -26,27 +30,57 @@ impl Image for DockerImage {
     }
 }
 
-impl Docker {
-    pub fn new() -> Self {
-        Docker {
-            binary: PathBuf::from("docker"),
-            socket: None,
-        }
+impl DockerCliCompatible {
+    pub fn resolve_with_supported_binary() -> Result<Self> {
+        // TODO, make this more robust
+        // Should also configure docker's context (where applicable)
+        let clients = vec!["colima", "lima", "nerdctl", "docker", "podman"];
+        let first_supported = clients
+            .into_iter()
+            .map(|client| (client, which(client)))
+            .find(|(client, binary)| binary.is_ok());
+
+        let (client, binary) =
+            first_supported.ok_or(anyhow!("No supported driver installed in $PATH"))?;
+        log::info!("using client `{}`", client);
+
+        Ok(match client {
+            "colima" => DockerCliCompatible {
+                binary: binary.unwrap(),
+                argument: Some("nerdctl".into()),
+                socket: None,
+            },
+            "lima" => DockerCliCompatible {
+                binary: binary.unwrap(),
+                argument: Some("nerdctl".into()),
+                socket: None,
+            },
+            _ => DockerCliCompatible {
+                binary: binary.unwrap(),
+                argument: None,
+                socket: None,
+            },
+        })
     }
 }
 
-impl Default for Docker {
+// TODO remove impl as resolve_with_supported_binary is fallible
+impl Default for DockerCliCompatible {
     fn default() -> Self {
-        Docker::new()
+        DockerCliCompatible::resolve_with_supported_binary().unwrap()
     }
 }
 
 #[async_trait]
-impl Driver for Docker {
+impl Driver for DockerCliCompatible {
     type Image = DockerImage;
 
     async fn path(&self, image: &Self::Image) -> Result<Option<String>> {
         let mut command = Command::new(&self.binary);
+        if let Some(argument) = &self.argument {
+            command.arg(argument);
+        }
+
         command.arg("inspect");
         command.arg("--format={{json .Config.Env}}");
         command.arg(image.id());
@@ -84,6 +118,9 @@ impl Driver for Docker {
             Reference::Tag(tag) => format!("{}/{}:{}", registry, repository, tag),
         };
         let mut pull_command = Command::new(&self.binary);
+        if let Some(argument) = &self.argument {
+            pull_command.arg(argument);
+        }
         pull_command.env_clear();
         pull_command.arg("pull");
         pull_command.arg(&name);
@@ -102,6 +139,9 @@ impl Driver for Docker {
         }
 
         let mut inspect_command = Command::new(&self.binary);
+        if let Some(argument) = &self.argument {
+            inspect_command.arg(argument);
+        }
         inspect_command.arg("inspect");
         inspect_command.arg("--format={{.Id}}");
         inspect_command.arg(&name);
@@ -143,7 +183,9 @@ impl Driver for Docker {
         let mut command = Command::new(&self.binary);
         command.env_clear();
         command.env("DOCKER_BUILDKIT", "1");
-
+        if let Some(argument) = &self.argument {
+            command.arg(argument);
+        }
         command.arg("build");
 
         for build_arg in build_args {

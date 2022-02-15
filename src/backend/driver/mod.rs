@@ -7,7 +7,7 @@ use std::process::Stdio;
 
 use anyhow::Result;
 use async_trait::async_trait;
-pub use docker::Docker;
+pub use docker::DockerCliCompatible;
 
 use crate::backend::{BuildArg, EnvVar, Image, Mount, Secret, Ssh};
 use crate::oci::image::Reference;
