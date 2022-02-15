@@ -125,6 +125,7 @@ pub struct BuildArg {
     value: String,
 }
 
+#[derive(Debug)]
 pub struct EnvVar {
     name: String,
     value: String,
@@ -275,18 +276,7 @@ where
         ]
     }
 
-    pub async fn spawn(
-        &self,
-        image: D::Image,
-        config: &ContainerConfig,
-        stdin: Stdio,
-        stdout: Stdio,
-        stderr: Stdio,
-    ) -> anyhow::Result<()> {
-        let image_id = image.id();
-        let image_bin_dir = self.image_bin_dir(image_id)?;
-        let mounts = self.create_mounts(image_bin_dir);
-
+    fn create_env_vars(&self, path: &String, config: &ContainerConfig) -> Vec<EnvVar> {
         let mut envs = vec![];
         if let Some(env_vars) = &config.env {
             for (name, value) in env_vars {
@@ -296,21 +286,60 @@ where
                 });
             }
         }
+
         envs.push(EnvVar {
             name: "TOIP_SOCK".to_string(),
             value: CONTAINER_SOCKET.to_string(),
         });
 
+        envs.push(EnvVar {
+            name: "path".to_string(),
+            value: path.clone(),
+        });
+
+        envs
+    }
+
+    pub async fn spawn(
+        &self,
+        image: D::Image,
+        config: &ContainerConfig,
+        args: Vec<String>,
+        stdin: Stdio,
+        stdout: Stdio,
+        stderr: Stdio,
+    ) -> anyhow::Result<()> {
+        let image_id = image.id();
+        let image_bin_dir = self.image_bin_dir(image_id)?;
+        let mounts = self.create_mounts(image_bin_dir);
+
+        let path = self
+            .driver
+            .path(&image)
+            .await
+            .context("could not determine PATH")?
+            .map_or(CONTAINER_BINARY.into(), |some| {
+                format!("{}:{}", CONTAINER_BIN_DIR, &some)
+            });
+
+        let env_vars = self.create_env_vars(&path, &config);
+
+        let cmd = config.cmd.clone();
+        // TODO decide what to do with arguments? Does it make sense to configure them?
+        // let args = args.or(config.args.clone());
+        let entrypoint = config.entrypoint.clone();
+        let workdir = config.workdir.clone();
+
         self.driver
             .run(
                 image,
                 mounts,
-                None,
-                None,
-                None,
-                envs,
+                entrypoint,
+                cmd,
+                Some(args),
+                env_vars,
                 vec![],
-                None,
+                workdir,
                 None,
                 stdin,
                 stdout,

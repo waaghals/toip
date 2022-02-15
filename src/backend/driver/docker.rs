@@ -6,6 +6,7 @@ use std::process::Stdio;
 
 use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
+use regex::Regex;
 use tokio::process::Command;
 
 use crate::backend::{BuildArg, Driver, EnvVar, Image, Mount, MountType, Secret, Ssh};
@@ -44,6 +45,34 @@ impl Default for Docker {
 impl Driver for Docker {
     type Image = DockerImage;
 
+    async fn path(&self, image: &Self::Image) -> Result<Option<String>> {
+        let mut command = Command::new(&self.binary);
+        command.arg("inspect");
+        command.arg("--format={{json .Config.Env}}");
+        command.arg(image.id());
+
+        command.stdin(Stdio::null());
+        command.stderr(Stdio::null());
+
+        let output = command
+            .output()
+            .await
+            .context("could not run inspect command to determine path")?;
+
+        let output_utf8 = String::from_utf8_lossy(&output.stdout);
+        let regex = Regex::new(r#"PATH=([^"]+)"#).unwrap();
+        let captures = regex.captures(&output_utf8);
+        let path = captures
+            .map(|captures| {
+                let capture = captures.get(1);
+                capture.map(|capture| capture.as_str())
+            })
+            .flatten()
+            .map(|path| path.to_string());
+
+        Ok(path)
+    }
+
     async fn pull(
         &self,
         registry: &str,
@@ -59,6 +88,10 @@ impl Driver for Docker {
         pull_command.arg("pull");
         pull_command.arg(&name);
 
+        pull_command.stdin(Stdio::null());
+        pull_command.stdout(Stdio::null());
+        pull_command.stderr(Stdio::null());
+
         let status = pull_command
             .status()
             .await
@@ -72,6 +105,9 @@ impl Driver for Docker {
         inspect_command.arg("inspect");
         inspect_command.arg("--format={{.Id}}");
         inspect_command.arg(&name);
+
+        inspect_command.stdin(Stdio::null());
+        inspect_command.stderr(Stdio::null());
 
         let output = inspect_command
             .output()
@@ -139,6 +175,9 @@ impl Driver for Docker {
 
         command.arg("--quiet");
         command.arg(context.as_ref());
+
+        command.stdin(Stdio::null());
+        command.stderr(Stdio::null());
 
         let output = command
             .output()
@@ -258,8 +297,6 @@ impl Driver for Docker {
                 }
             }
         }
-
-        dbg!(&command);
 
         command
             .stdin(stdin)

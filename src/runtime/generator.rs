@@ -273,20 +273,22 @@ where
         .as_ref()
         .map(|ic| ic.entrypoint.clone())
         .flatten();
-    let entrypoint = config.entrypoint.or(image_entrypoint);
+    // let entrypoint = config.entrypoint.or(image_entrypoint);
+    let entrypoint = Option::<String>::None;
 
     let mut actual_cmd = Vec::new();
 
-    if let Some(entrypoint) = entrypoint {
-        actual_cmd.extend(entrypoint);
-    }
+    // if let Some(entrypoint) = entrypoint {
+    //     actual_cmd.extend(entrypoint);
+    // }
 
     let image_cmd = image_config.map(|image_config| image_config.cmd).flatten();
-    let cmd = config.cmd.or(image_cmd);
+    // let cmd = config.cmd.or(image_cmd);
+    let cmd = Option::<String>::None;
 
-    if let Some(cmd) = cmd {
-        actual_cmd.extend(cmd);
-    }
+    // if let Some(cmd) = cmd {
+    //     actual_cmd.extend(cmd);
+    // }
 
     if actual_cmd.is_empty() {
         actual_cmd.push("sh".to_string());

@@ -3,11 +3,13 @@ use std::fs::File;
 
 use anyhow::{bail, Context, Result};
 
+use crate::backend::driver::Docker;
+use crate::backend::Backend;
 use crate::config::{find_config_file, Config};
 use crate::image::manager::ImageManager;
 
 async fn prepare_config(config: &Config, container: Option<String>) -> Result<()> {
-    let image_manager = ImageManager::new().context("could not construct `ImageManager`")?;
+    let backend = Backend::<Docker>::default();
     match container {
         Some(name) => {
             let container = config
@@ -18,15 +20,15 @@ async fn prepare_config(config: &Config, container: Option<String>) -> Result<()
                         name
                     )
                 })?;
-            image_manager
-                .prepare(&container.image)
+            backend
+                .prepare(&container)
                 .await
                 .with_context(|| format!("could not prepare container `{}`", name))?;
         }
         None => {
             for (name, container) in &config.containers {
-                image_manager
-                    .prepare(&container.image)
+                backend
+                    .prepare(&container)
                     .await
                     .with_context(|| format!("could not prepare container `{}`", name))?;
             }

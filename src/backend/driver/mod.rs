@@ -16,6 +16,8 @@ use crate::oci::image::Reference;
 pub trait Driver {
     type Image: Image;
 
+    async fn path(&self, image: &Self::Image) -> Result<Option<String>>;
+
     async fn pull(
         &self,
         registry: &str,

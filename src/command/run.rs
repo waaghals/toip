@@ -1,9 +1,9 @@
-use std::fs;
 use std::os::unix::io::FromRawFd;
 use std::path::Path;
 use std::process::Stdio;
+use std::{env, fs};
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use futures_util::stream::FuturesUnordered;
 use itertools::join;
 use tokio::sync::mpsc;
@@ -14,7 +14,7 @@ use tokio_util::sync::CancellationToken;
 use crate::backend::driver::Docker;
 use crate::backend::{script, Backend};
 use crate::command::call::call;
-use crate::config::Config;
+use crate::config::{find_config_file, Config};
 use crate::{dirs, server, OciCliRuntime, RunGenerator};
 
 pub async fn run<P>(script_path: P, args: Vec<String>) -> Result<()>
@@ -31,7 +31,11 @@ where
             script_path.display()
         )
     })?;
-    let config = Config::new_from_dir(script_dir)?;
+
+    // TODO decide how to load config
+    let current_dir = env::current_dir()?;
+    let config_path = find_config_file(current_dir).ok_or(anyhow!("Unable to find config file"))?;
+    let config = Config::new_from_dir(config_path.parent().unwrap())?;
     let runtime = OciCliRuntime::default();
     let runtime_generator = RunGenerator::default();
 
@@ -114,7 +118,14 @@ where
                 drop(instruction.file_descriptors);
 
                 backend
-                    .spawn(image, &container_config, stdin, stdout, stderr)
+                    .spawn(
+                        image,
+                        &container_config,
+                        instruction.info.arguments,
+                        stdin,
+                        stdout,
+                        stderr,
+                    )
                     .await
             }
         });

@@ -190,8 +190,10 @@ impl Serialize for ImageSource {
 pub struct ContainerConfig {
     pub image: ImageSource,
     pub links: Option<HashMap<String, String>>,
-    pub entrypoint: Option<Vec<String>>,
-    pub cmd: Option<Vec<String>>,
+    pub entrypoint: Option<String>,
+    pub workdir: Option<PathBuf>,
+    pub cmd: Option<String>,
+    pub args: Option<Vec<String>>,
     pub volumes: Option<HashMap<String, String>>,
     pub env: Option<HashMap<String, String>>,
     pub inherit_envvars: Option<Vec<String>>,
