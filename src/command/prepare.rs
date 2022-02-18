@@ -6,7 +6,6 @@ use anyhow::{bail, Context, Result};
 use crate::backend::driver::DockerCliCompatible;
 use crate::backend::Backend;
 use crate::config::{find_config_file, Config};
-use crate::image::manager::ImageManager;
 
 async fn prepare_config(config: &Config, container: Option<String>) -> Result<()> {
     let backend = Backend::<DockerCliCompatible>::default();

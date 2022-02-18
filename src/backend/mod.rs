@@ -6,16 +6,13 @@ use std::path::PathBuf;
 use std::process::Stdio;
 use std::{env, fmt};
 
-use anyhow::{bail, Context, Result};
-use async_trait::async_trait;
+use anyhow::{anyhow, Context, Result};
 use const_format::formatcp;
-use tokio::process::Command;
 
-use crate::backend::driver::{DockerCliCompatible, Driver};
-use crate::config::{ContainerConfig, ImageSource, RegistrySource};
+use crate::backend::driver::Driver;
+use crate::config::{Config, ContainerConfig, ImageSource, Volume};
 use crate::dirs;
 use crate::metadata::APPLICATION_NAME;
-use crate::oci::image::Reference;
 
 const CONTAINER_BIN_DIR: &str = formatcp!("/usr/bin/{}", APPLICATION_NAME);
 const CONTAINER_BINARY: &str = formatcp!("{}/{}", CONTAINER_BIN_DIR, APPLICATION_NAME);
@@ -203,7 +200,7 @@ where
                     .await
             }
             ImageSource::Build(ref build_image) => {
-                let file = match &build_image.container_file {
+                let file = match &build_image.file {
                     None => PathBuf::from("Dockerfile"),
                     Some(file) => file.clone(),
                 };
@@ -228,7 +225,7 @@ where
                 script_path.push(&name);
 
                 log::debug!(
-                    "creating binary `{}` linked to container `{}` at `{}`",
+                    "creating nbinary `{}` linked to container `{}` at `{}`",
                     name,
                     target,
                     script_path.to_str().unwrap()
@@ -241,14 +238,18 @@ where
         Ok(image)
     }
 
-    fn create_mounts(&self, image_bin_dir: PathBuf) -> Vec<Mount> {
-        vec![
+    fn create_mounts(
+        &self,
+        image_bin_dir: PathBuf,
+        volumes: HashMap<PathBuf, Volume>,
+    ) -> Vec<Mount> {
+        let mut mounts = vec![
             Mount {
                 mount_type: MountType::Bind {
                     source: image_bin_dir,
-                    consistency: BindConsistency::default(),
-                    bind_propagation: BindPropagation::default(),
-                    bind_nonrecursive: BindNonRecursive::default(),
+                    consistency: Default::default(),
+                    bind_propagation: Default::default(),
+                    bind_nonrecursive: Default::default(),
                 },
                 target: CONTAINER_BIN_DIR.into(),
                 readonly: true,
@@ -256,9 +257,9 @@ where
             Mount {
                 mount_type: MountType::Bind {
                     source: self.current_exe.clone(),
-                    consistency: BindConsistency::default(),
-                    bind_propagation: BindPropagation::default(),
-                    bind_nonrecursive: BindNonRecursive::default(),
+                    consistency: Default::default(),
+                    bind_propagation: Default::default(),
+                    bind_nonrecursive: Default::default(),
                 },
                 target: CONTAINER_BINARY.into(),
                 readonly: true,
@@ -266,14 +267,36 @@ where
             Mount {
                 mount_type: MountType::Bind {
                     source: self.socket.clone(),
-                    consistency: BindConsistency::default(),
-                    bind_propagation: BindPropagation::default(),
-                    bind_nonrecursive: BindNonRecursive::default(),
+                    consistency: Default::default(),
+                    bind_propagation: Default::default(),
+                    bind_nonrecursive: Default::default(),
                 },
                 target: CONTAINER_SOCKET.into(),
                 readonly: true,
             },
-        ]
+        ];
+
+        for (destination, volume) in volumes {
+            match volume {
+                // Volume::Anonymous(_) => {
+                //     todo!()
+                // }
+                Volume::Named(named) => {
+                    mounts.push(Mount {
+                        mount_type: MountType::Bind {
+                            source: named.source.clone(),
+                            consistency: Default::default(),
+                            bind_propagation: Default::default(),
+                            bind_nonrecursive: Default::default(),
+                        },
+                        target: destination.clone(),
+                        readonly: false,
+                    });
+                }
+            }
+        }
+
+        mounts
     }
 
     fn create_env_vars(&self, path: &String, config: &ContainerConfig) -> Vec<EnvVar> {
@@ -303,7 +326,8 @@ where
     pub async fn spawn(
         &self,
         image: D::Image,
-        config: &ContainerConfig,
+        config: &Config,
+        container_config: &ContainerConfig,
         args: Vec<String>,
         stdin: Stdio,
         stdout: Stdio,
@@ -311,7 +335,18 @@ where
     ) -> anyhow::Result<()> {
         let image_id = image.id();
         let image_bin_dir = self.image_bin_dir(image_id)?;
-        let mounts = self.create_mounts(image_bin_dir);
+
+        let mut volumes = HashMap::new();
+        for (destination, volume_name) in &container_config.volumes {
+            let volume = config
+                .volumes
+                .get(volume_name.as_str())
+                // TODO improve error
+                .ok_or(anyhow!("Missing volume"))?;
+            volumes.insert(destination.clone(), volume.clone());
+        }
+
+        let mounts = self.create_mounts(image_bin_dir, volumes);
 
         let path = self
             .driver
@@ -322,13 +357,13 @@ where
                 format!("{}:{}", CONTAINER_BIN_DIR, &some)
             });
 
-        let env_vars = self.create_env_vars(&path, &config);
+        let env_vars = self.create_env_vars(&path, &container_config);
 
-        let cmd = config.cmd.clone();
+        let cmd = container_config.cmd.clone();
         // TODO decide what to do with arguments? Does it make sense to configure them?
         // let args = args.or(config.args.clone());
-        let entrypoint = config.entrypoint.clone();
-        let workdir = config.workdir.clone();
+        let entrypoint = container_config.entrypoint.clone();
+        let workdir = container_config.workdir.clone();
 
         self.driver
             .run(

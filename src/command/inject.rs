@@ -26,7 +26,7 @@ fn print_bash_compatible(export_path: bool, auto_install: bool, auto_prepare: bo
         print!(
             r##"
 function _toip_hook {{
-  if [[ "$PREVPWD" != "$PWD" ]]; then
+  if [ "$PREVPWD" != "$PWD" ]; then
 {}
   fi
   # refresh last working backend record

@@ -12,7 +12,7 @@ use backend::script;
 use clap::Parser;
 use server::CallInfo;
 
-use crate::cli::{Cli, Command};
+use crate::cli::{Arguments, Cli, Command};
 use crate::command::{call, inject, install, prepare, run};
 use crate::oci::runtime::OciCliRuntime;
 use crate::runtime::generator::{RunGenerator, RuntimeBundleGenerator};
@@ -37,12 +37,23 @@ async fn main() -> Result<()> {
     log::trace!("current pid is `{}`", process::id());
 
     match cli.command {
-        Command::Run { script, args } => run(script, args).await,
+        Command::Run { script, args } => {
+            let actual_args = match args {
+                Some(Arguments::Arguments(arg)) => arg,
+                None => vec![],
+            };
+            run(script, actual_args).await
+        }
         Command::Call { script, args } => {
             let container_name = script::read_container(script)?;
             let socket_path = env::var("TOIP_SOCK")
                 .context("environment variable `TOIP_SOCK` does not exists")?;
-            call(socket_path, &container_name, args)
+
+            let actual_args = match args {
+                Some(Arguments::Arguments(arg)) => arg,
+                None => vec![],
+            };
+            call(socket_path, &container_name, actual_args)
                 .with_context(|| format!("could not call container `{}`", container_name))
         }
         Command::Prepare {

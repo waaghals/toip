@@ -101,13 +101,15 @@ pub fn install(ignore_missing_config: bool) -> Result<()> {
 
             let script_dir = dirs::script(&config_dir)?;
 
-            // Reset whole directory
-            fs::remove_dir_all(&script_dir).with_context(|| {
-                format!(
-                    "could not reset scripts directory `{}`",
-                    script_dir.display()
-                )
-            })?;
+            if script_dir.exists() {
+                // Reset whole directory
+                fs::remove_dir_all(&script_dir).with_context(|| {
+                    format!(
+                        "could not reset scripts directory `{}`",
+                        script_dir.display()
+                    )
+                })?;
+            }
 
             create_scripts(&script_dir, &config).with_context(|| {
                 format!(

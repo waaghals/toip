@@ -1,0 +1,29 @@
+aliases:
+  php: php8
+  composer: composer
+  sh: sh
+containers:
+  sh:
+    image:
+      context: .
+      target: runtime
+    cmd: sh
+    volumes:
+      /app: source_files
+    workdir: /app
+  php8:
+    image:
+      context: .
+      target: runtime
+    cmd: php
+    volumes:
+      /app: source_files
+    workdir: /app
+  composer:
+    image:
+      context: .
+      target: composer
+volumes:
+  source_files:
+    source: /example
+    readonly: true

@@ -1,19 +1,14 @@
 use std::borrow::Cow;
-use std::collections::HashMap;
-use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
-use clap::arg;
-use itertools::Itertools;
 use regex::Regex;
 use tokio::process::Command;
 use which::which;
 
 use crate::backend::{BuildArg, Driver, EnvVar, Image, Mount, MountType, Secret, Ssh};
-use crate::config::{ContainerConfig, ImageSource, RegistrySource};
 use crate::oci::image::Reference;
 
 pub struct DockerCliCompatible {
@@ -38,7 +33,7 @@ impl DockerCliCompatible {
         let first_supported = clients
             .into_iter()
             .map(|client| (client, which(client)))
-            .find(|(client, binary)| binary.is_ok());
+            .find(|(_client, binary)| binary.is_ok());
 
         let (client, binary) =
             first_supported.ok_or(anyhow!("No supported driver installed in $PATH"))?;
@@ -227,12 +222,17 @@ impl Driver for DockerCliCompatible {
             .context("could not run prepare command")?;
 
         if !output.status.success() {
+            println!("{}", String::from_utf8_lossy(&output.stderr));
             bail!("prepare command failed");
         }
 
-        let container_id = String::from_utf8_lossy(&output.stdout);
+        let output_utf8 = String::from_utf8_lossy(&output.stdout);
+        let image_id = match output_utf8.strip_suffix("\n") {
+            None => output_utf8,
+            Some(trimmed) => Cow::Borrowed(trimmed),
+        };
 
-        Ok(DockerImage(container_id.to_string()))
+        Ok(DockerImage(image_id.to_string()))
     }
 
     async fn run(
@@ -252,9 +252,9 @@ impl Driver for DockerCliCompatible {
     ) -> Result<()> {
         let mut command = Command::new(&self.binary);
         command.env_clear();
+        dbg!(&args);
 
         command.arg("run");
-
         command.arg("--rm");
         command.arg("-it");
 
@@ -333,13 +333,14 @@ impl Driver for DockerCliCompatible {
 
         if let Some(cmd) = cmd {
             command.arg(cmd);
-            if let Some(args) = args {
-                for arg in args {
-                    command.arg(arg);
-                }
+        }
+        if let Some(args) = args {
+            for arg in args {
+                command.arg(arg);
             }
         }
 
+        log::trace!("{:#?}", command);
         command
             .stdin(stdin)
             .stdout(stdout)

@@ -25,7 +25,7 @@ where
     let container_name = script::read_container(script_path)
         .with_context(|| format!("could not read script file `{}`", script_path.display()))?;
 
-    let script_dir = script_path.parent().with_context(|| {
+    let _script_dir = script_path.parent().with_context(|| {
         format!(
             "could not determine config directory from script file `{}`",
             script_path.display()
@@ -117,9 +117,11 @@ where
                 // Drop file_descriptors from above so they cannot be used elsewhere
                 drop(instruction.file_descriptors);
 
+                println!("{:#?}", instruction.info.arguments);
                 backend
                     .spawn(
                         image,
+                        &config,
                         &container_config,
                         instruction.info.arguments,
                         stdin,

@@ -264,17 +264,17 @@ fn build_mounts(
 }
 
 // TODO cleanup this clone mess, clone is required, because we need owned values, but could be improved I think.
-fn build_cmd<I>(image: Image, config: ContainerConfig, arguments: I) -> Vec<String>
+fn build_cmd<I>(image: Image, _config: ContainerConfig, arguments: I) -> Vec<String>
 where
     I: IntoIterator<Item = String>,
 {
     let image_config = image.config;
-    let image_entrypoint = image_config
+    let _image_entrypoint = image_config
         .as_ref()
         .map(|ic| ic.entrypoint.clone())
         .flatten();
     // let entrypoint = config.entrypoint.or(image_entrypoint);
-    let entrypoint = Option::<String>::None;
+    let _entrypoint = Option::<String>::None;
 
     let mut actual_cmd = Vec::new();
 
@@ -282,9 +282,9 @@ where
     //     actual_cmd.extend(entrypoint);
     // }
 
-    let image_cmd = image_config.map(|image_config| image_config.cmd).flatten();
+    let _image_cmd = image_config.map(|image_config| image_config.cmd).flatten();
     // let cmd = config.cmd.or(image_cmd);
-    let cmd = Option::<String>::None;
+    let _cmd = Option::<String>::None;
 
     // if let Some(cmd) = cmd {
     //     actual_cmd.extend(cmd);

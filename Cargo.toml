@@ -27,7 +27,7 @@ serde_json = "1.0.66"
 serde_yaml = "0.8.23"
 sha2 = "0.9.5"
 simplelog = "0.10.0"
-clap = {version = "3.0.7", features = ["derive"]}
+clap = {version = "3.1.2", features = ["derive"]}
 tar = "0.4.37"
 termion = "1.5.6"
 thiserror = "1.0.26"

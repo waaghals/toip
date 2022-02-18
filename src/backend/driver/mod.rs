@@ -1,7 +1,5 @@
 mod docker;
 
-use std::ffi::OsStr;
-use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 

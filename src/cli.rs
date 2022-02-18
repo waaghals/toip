@@ -5,6 +5,7 @@ use clap_verbosity_flag::Verbosity;
 
 #[derive(Parser, Debug)]
 #[clap(version, author, about)]
+#[clap(propagate_version = true)]
 pub struct Cli {
     #[clap(flatten)]
     pub verbose: Verbosity,
@@ -13,7 +14,14 @@ pub struct Cli {
     pub command: Command,
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Debug, PartialEq, Subcommand)]
+pub enum Arguments {
+    #[clap(external_subcommand)]
+    Arguments(Vec<String>),
+}
+
+#[derive(Debug, PartialEq, Subcommand)]
+#[clap(infer_subcommands = true)]
 pub enum Command {
     /// Install the configured aliases
     Install {
@@ -46,7 +54,8 @@ pub enum Command {
         #[clap(parse(from_os_str))]
         script: PathBuf,
         /// Argument to call the container with
-        args: Vec<String>,
+        #[clap(subcommand)]
+        args: Option<Arguments>,
     },
 
     /// Run a linked container from another container
@@ -55,7 +64,8 @@ pub enum Command {
         #[clap(parse(from_os_str))]
         script: PathBuf,
         /// Argument to call the container with
-        args: Vec<String>,
+        #[clap(subcommand)]
+        args: Option<Arguments>,
     },
 
     /// Remove cache and/or containers
@@ -66,7 +76,7 @@ pub enum Command {
     },
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Debug, PartialEq, Subcommand)]
 pub enum Shell {
     /// Configuration for bash
     ///
@@ -117,7 +127,7 @@ pub enum Shell {
         delegate: InjectShell,
     },
 }
-#[derive(Debug, Args)]
+#[derive(Debug, PartialEq, Args)]
 pub struct InjectShell {
     /// Modify path variable
     #[clap(short, long)]
