@@ -91,6 +91,11 @@ pub fn blobs_dir() -> Result<PathBuf> {
 fn containers() -> Result<PathBuf> {
     state_dir("containers")
 }
+
+fn images() -> Result<PathBuf> {
+    state_dir("images")
+}
+
 pub fn scripts() -> Result<PathBuf> {
     state_dir("scripts")
 }
@@ -123,6 +128,17 @@ where
 
     let mut dir: PathBuf = scripts()?;
     dir.push(digest);
+    Ok(dir)
+}
+
+pub fn image<D, I>(driver: D, image_id: I) -> Result<PathBuf>
+where
+    D: AsRef<Path>,
+    I: AsRef<Path>,
+{
+    let mut dir: PathBuf = images()?;
+    dir.push(driver);
+    dir.push(image_id);
     Ok(dir)
 }
 

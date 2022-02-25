@@ -16,12 +16,13 @@ pub fn init(level: Option<Level>) -> Result<()> {
     let config = ConfigBuilder::new()
         .set_max_level(LevelFilter::Error)
         .set_time_level(LevelFilter::Error)
-        .set_thread_level(LevelFilter::Off)
+        .set_thread_level(LevelFilter::Error)
         .set_target_level(LevelFilter::Off)
         .set_location_level(LevelFilter::Off)
         .build();
 
     TermLogger::init(
+        // LevelFilter::Trace,
         level_filter(level),
         config,
         TerminalMode::Stderr,

@@ -5,8 +5,9 @@ use std::{env, fs};
 
 use anyhow::{anyhow, bail, Context, Result};
 
+use crate::backend::script;
 use crate::config::Config;
-use crate::{config, dirs, script};
+use crate::{config, dirs};
 
 fn create_scripts<D>(directory: D, config: &Config) -> Result<()>
 where
@@ -39,7 +40,7 @@ where
         "Pointing scripts lookup directory to `{}`",
         target_dir_display
     );
-    let bin_dir = dirs::path().context("could not determine bin dir")?;
+    let bin_dir = dirs::path().context("could not determine bin backend")?;
 
     if let Some(parent) = bin_dir.parent() {
         if !parent.exists() {
@@ -100,13 +101,15 @@ pub fn install(ignore_missing_config: bool) -> Result<()> {
 
             let script_dir = dirs::script(&config_dir)?;
 
-            // Reset whole directory
-            fs::remove_dir_all(&script_dir).with_context(|| {
-                format!(
-                    "could not reset scripts directory `{}`",
-                    script_dir.display()
-                )
-            })?;
+            if script_dir.exists() {
+                // Reset whole directory
+                fs::remove_dir_all(&script_dir).with_context(|| {
+                    format!(
+                        "could not reset scripts directory `{}`",
+                        script_dir.display()
+                    )
+                })?;
+            }
 
             create_scripts(&script_dir, &config).with_context(|| {
                 format!(

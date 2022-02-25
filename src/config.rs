@@ -33,26 +33,17 @@ impl fmt::Display for RegistrySource {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct PathSource {
-    context: PathBuf,
-}
-
-impl fmt::Display for PathSource {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", &self.context)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, DeriveDeserialize, DeriveSerialize)]
 pub struct BuildSource {
-    container_file: Option<PathBuf>,
-    context: PathBuf,
+    pub file: Option<PathBuf>,
+    pub target: Option<String>,
+    pub context: PathBuf,
+    pub build_args: Option<HashMap<String, String>>,
 }
 
 impl fmt::Display for BuildSource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.container_file {
+        match &self.file {
             Some(container_file) => {
                 write!(f, "{:?}?containerfile={:?}", self.context, container_file)
             }
@@ -61,11 +52,25 @@ impl fmt::Display for BuildSource {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, DeriveDeserialize)]
+#[serde(untagged)]
 pub enum ImageSource {
     Registry(RegistrySource),
-    Path(PathSource),
     Build(BuildSource),
+}
+
+#[derive(Debug, Clone, PartialEq, DeriveDeserialize, DeriveSerialize)]
+pub struct NamedVolume {
+    pub source: PathBuf,
+    pub readonly: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, DeriveDeserialize, DeriveSerialize)]
+#[serde(untagged)]
+pub enum Volume {
+    // Option is never user, but allows end-user to configure any value
+    // Anonymous(Option<String>),
+    Named(NamedVolume),
 }
 
 impl TryFrom<&str> for RegistrySource {
@@ -105,14 +110,6 @@ impl TryFrom<&str> for RegistrySource {
     }
 }
 
-impl TryFrom<&str> for PathSource {
-    type Error = ParseImageError;
-
-    fn try_from(_value: &str) -> Result<Self, Self::Error> {
-        todo!()
-    }
-}
-
 impl TryFrom<&str> for BuildSource {
     type Error = ParseImageError;
 
@@ -131,9 +128,6 @@ impl TryFrom<&str> for ImageSource {
         } else if let Some(part) = value.strip_prefix("build://") {
             let config = part.try_into()?;
             Ok(ImageSource::Build(config))
-        } else if let Some(part) = value.strip_prefix("path://") {
-            let config = part.try_into()?;
-            Ok(ImageSource::Path(config))
         } else {
             Err(ParseImageError::UnknownScheme)
         }
@@ -144,7 +138,6 @@ impl fmt::Display for ImageSource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ImageSource::Registry(registry) => write!(f, "registry://{}", registry),
-            ImageSource::Path(path) => write!(f, "path://{}", path),
             ImageSource::Build(build) => write!(f, "build://{}", build),
         }
     }
@@ -171,15 +164,15 @@ impl fmt::Display for ParseImageError {
 
 impl error::Error for ParseImageError {}
 
-impl<'de> Deserialize<'de> for ImageSource {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let string = String::deserialize(deserializer)?;
-        ImageSource::try_from(string.as_str()).map_err(de::Error::custom)
-    }
-}
+// impl<'de> Deserialize<'de> for ImageSource {
+//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+//     where
+//         D: Deserializer<'de>,
+//     {
+//         let string = String::deserialize(deserializer)?;
+//         ImageSource::try_from(string.as_str()).map_err(de::Error::custom)
+//     }
+// }
 
 impl Serialize for ImageSource {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -191,13 +184,27 @@ impl Serialize for ImageSource {
     }
 }
 
+impl<'de> Deserialize<'de> for RegistrySource {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let string = String::deserialize(deserializer)?;
+        RegistrySource::try_from(string.as_str()).map_err(de::Error::custom)
+    }
+}
+
 #[derive(Debug, DeriveDeserialize, DeriveSerialize, Clone)]
 pub struct ContainerConfig {
     pub image: ImageSource,
     pub links: Option<HashMap<String, String>>,
-    pub entrypoint: Option<Vec<String>>,
-    pub cmd: Option<Vec<String>>,
-    pub volumes: Option<HashMap<String, String>>,
+    pub entrypoint: Option<String>,
+    pub workdir: Option<PathBuf>,
+    pub cmd: Option<String>,
+    #[serde(default)]
+    pub args: Vec<String>,
+    #[serde(default)]
+    pub volumes: HashMap<PathBuf, String>,
     pub env: Option<HashMap<String, String>>,
     pub inherit_envvars: Option<Vec<String>>,
 }
@@ -205,7 +212,8 @@ pub struct ContainerConfig {
 #[derive(Debug, DeriveDeserialize, DeriveSerialize, Clone)]
 pub struct Config {
     pub containers: HashMap<String, ContainerConfig>,
-    pub volumes: HashMap<String, String>,
+    #[serde(default)]
+    pub volumes: HashMap<String, Volume>,
     pub aliases: HashMap<String, String>,
 }
 

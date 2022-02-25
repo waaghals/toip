@@ -1,21 +1,21 @@
-use std::fs;
 use std::os::unix::io::FromRawFd;
 use std::path::Path;
 use std::process::Stdio;
+use std::{env, fs};
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use futures_util::stream::FuturesUnordered;
 use itertools::join;
-use rand::distributions::Alphanumeric;
-use rand::{self, Rng};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::StreamExt;
 use tokio_util::sync::CancellationToken;
 
+use crate::backend::driver::DockerCliCompatible;
+use crate::backend::{script, Backend};
 use crate::command::call::call;
-use crate::config::Config;
-use crate::{dirs, script, server, OciCliRuntime, RunGenerator, Runtime, RuntimeBundleGenerator};
+use crate::config::{find_config_file, Config};
+use crate::{dirs, server, OciCliRuntime, RunGenerator};
 
 pub async fn run<P>(script_path: P, args: Vec<String>) -> Result<()>
 where
@@ -25,13 +25,17 @@ where
     let container_name = script::read_container(script_path)
         .with_context(|| format!("could not read script file `{}`", script_path.display()))?;
 
-    let script_dir = script_path.parent().with_context(|| {
+    let _script_dir = script_path.parent().with_context(|| {
         format!(
             "could not determine config directory from script file `{}`",
             script_path.display()
         )
     })?;
-    let config = Config::new_from_dir(script_dir)?;
+
+    // TODO decide how to load config
+    let current_dir = env::current_dir()?;
+    let config_path = find_config_file(current_dir).ok_or(anyhow!("Unable to find config file"))?;
+    let config = Config::new_from_dir(config_path.parent().unwrap())?;
     let runtime = OciCliRuntime::default();
     let runtime_generator = RunGenerator::default();
 
@@ -83,69 +87,48 @@ where
     // tx is dropped whenever server is dropped
     while let Some(instruction) = call_instruction_stream.next().await {
         let call_container_name = instruction.info.name.clone();
-        let runtime_generator = runtime_generator.clone();
-        let runtime = runtime.clone();
+
+        let _runtime_generator = runtime_generator.clone();
+        let _runtime = runtime.clone();
         let config = config.clone();
         log::trace!(
             "received file descriptors `{}`",
             join(&instruction.file_descriptors, ", ")
         );
 
-        let ci_socket = socket.clone();
+        let call_socket = socket.clone();
         let container_handle = tokio::spawn(async move {
             log::debug!("received call for container `{}`", instruction.info.name);
-            let container_option = config.get_container_by_name(&instruction.info.name);
 
-            match container_option {
-                Some(container) => {
-                    let container_id: String = rand::thread_rng()
-                        .sample_iter(&Alphanumeric)
-                        .take(30)
-                        .map(char::from)
-                        .collect();
+            let backend = Backend::new("docker", call_socket, DockerCliCompatible::default());
+            let name = &instruction.info.name;
+            let container_option = config.get_container_by_name(name);
+            let container_config =
+                container_option.with_context(|| format!("No container name `{}`", name))?;
 
-                    log::info!(
-                        "running `{:#?}` in container `{}`",
-                        container.cmd,
-                        container_id
-                    );
+            let image = backend.prepare(&container_config).await?;
+            // Ensure the the new Stdio instance are the sole owners of the file descriptors.
+            // i.e. no other code must consume the instructions.file_descriptors
+            unsafe {
+                let stdin = Stdio::from_raw_fd(instruction.file_descriptors[0]);
+                let stdout = Stdio::from_raw_fd(instruction.file_descriptors[1]);
+                let stderr = Stdio::from_raw_fd(instruction.file_descriptors[2]);
 
-                    let bundle_path = runtime_generator
-                        .build(
-                            &container_id,
-                            &container,
-                            instruction.info.arguments,
-                            ci_socket,
-                        )
-                        .await
-                        .context("was not able to generate runtime bundle")?;
+                // Drop file_descriptors from above so they cannot be used elsewhere
+                drop(instruction.file_descriptors);
 
-                    // Ensure the the new Stdio instance are the sole owners of the file descriptors.
-                    // i.e. no other code must consume the instructions.file_descriptors
-                    unsafe {
-                        let stdin = Stdio::from_raw_fd(instruction.file_descriptors[0]);
-                        let stdout = Stdio::from_raw_fd(instruction.file_descriptors[1]);
-                        let stderr = Stdio::from_raw_fd(instruction.file_descriptors[2]);
-
-                        // Drop file_descriptors from above so they cannot be used elsewhere
-                        drop(instruction.file_descriptors);
-
-                        runtime
-                            .run(&container_id, &bundle_path, stdin, stdout, stderr)
-                            .with_context(|| {
-                                format!("could not run container from `{}`", bundle_path.display())
-                            })?;
-                        log::debug!("runtime finished running container `{}`", container_id);
-                    }
-
-                    log::info!("removing bundle path `{}`", bundle_path.display());
-
-                    // TODO find out why work directory within the workdir is non executable
-                    rm_rf::remove(&bundle_path).with_context(|| {
-                        format!("could not remove directory `{}`", bundle_path.display())
-                    })
-                }
-                None => todo!(),
+                println!("{:#?}", instruction.info.arguments);
+                backend
+                    .spawn(
+                        image,
+                        &config,
+                        &container_config,
+                        instruction.info.arguments,
+                        stdin,
+                        stdout,
+                        stderr,
+                    )
+                    .await
             }
         });
 
