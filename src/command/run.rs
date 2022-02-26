@@ -6,6 +6,7 @@ use std::{env, fs};
 use anyhow::{anyhow, Context, Result};
 use futures_util::stream::FuturesUnordered;
 use itertools::join;
+use sha2::{Digest, Sha256};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::StreamExt;
@@ -35,7 +36,8 @@ where
     // TODO decide how to load config
     let current_dir = env::current_dir()?;
     let config_path = find_config_file(current_dir).ok_or(anyhow!("Unable to find config file"))?;
-    let config = Config::new_from_dir(config_path.parent().unwrap())?;
+    let config_dir = config_path.parent().unwrap().to_path_buf();
+    let config = Config::new_from_dir(&config_dir)?;
     let runtime = OciCliRuntime::default();
     let runtime_generator = RunGenerator::default();
 
@@ -97,6 +99,7 @@ where
         );
 
         let call_socket = socket.clone();
+        let config_dir = config_dir.clone();
         let container_handle = tokio::spawn(async move {
             log::debug!("received call for container `{}`", instruction.info.name);
 
@@ -123,6 +126,7 @@ where
                         image,
                         &config,
                         &container_config,
+                        &config_dir,
                         instruction.info.arguments,
                         stdin,
                         stdout,

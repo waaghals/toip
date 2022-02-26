@@ -23,7 +23,13 @@ containers:
     image:
       context: .
       target: composer
+    cmd: composer
+    volumes:
+      /tmp: composer_cache
+      /app: source_files
+    workdir: /app
 volumes:
   source_files:
-    source: /example
-    readonly: true
+    source: .
+  composer_cache:
+    name: composer_cache

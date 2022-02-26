@@ -273,44 +273,26 @@ impl Driver for DockerCliCompatible {
 
         for mount in mounts {
             command.arg("--mount");
-            match mount.mount_type {
-                MountType::Volume { source } => {
-                    let mut arg = format!("type=volume,target={}", mount.target.display());
-                    if let Some(source) = source {
-                        arg.push_str(format!(",source={}", source).as_str())
+
+            let mut arg = format!(
+                "type=bind,target={},source={}",
+                mount.target.display(),
+                mount.source.display(),
+            );
+            arg.push_str(format!(",consistency={}", mount.consistency).as_str());
+            arg.push_str(format!(",bind-propagation={}", mount.propagation).as_str());
+            arg.push_str(
+                format!(
+                    ",bind-nonrecursive={}",
+                    if mount.non_recursive.is_non_recursive() {
+                        "true"
+                    } else {
+                        "false"
                     }
-                    command.arg(arg);
-                }
-                MountType::Bind {
-                    source,
-                    consistency,
-                    bind_propagation,
-                    bind_nonrecursive,
-                } => {
-                    let mut arg = format!(
-                        "type=bind,target={},source={}",
-                        mount.target.display(),
-                        source.display(),
-                    );
-                    arg.push_str(format!(",consistency={}", consistency).as_str());
-                    arg.push_str(format!(",bind-propagation={}", bind_propagation).as_str());
-                    arg.push_str(
-                        format!(
-                            ",bind-nonrecursive={}",
-                            if bind_nonrecursive.is_non_recursive() {
-                                "true"
-                            } else {
-                                "false"
-                            }
-                        )
-                        .as_str(),
-                    );
-                    command.arg(arg);
-                }
-                MountType::Tmpfs => {
-                    command.arg("type=tmpfs");
-                }
-            }
+                )
+                .as_str(),
+            );
+            command.arg(arg);
         }
 
         if let Some(workdir) = workdir {
