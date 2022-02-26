@@ -1622,6 +1622,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
 
 [[package]]
+name = "subst"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "affc9f1367fa67c1417193fab41525a0a75ff3e686c29fe4b6f4608dd3e48e75"
+dependencies = [
+ "memchr",
+ "unicode-width",
+]
+
+[[package]]
 name = "syn"
 version = "1.0.75"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1778,6 +1788,7 @@ dependencies = [
  "serde_yaml",
  "sha2",
  "simplelog",
+ "subst",
  "tar",
  "termion",
  "thiserror",

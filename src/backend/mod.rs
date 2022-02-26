@@ -12,7 +12,6 @@ use const_format::formatcp;
 use crate::backend::driver::Driver;
 use crate::config::{Config, ContainerConfig, ImageSource, Volume};
 use crate::dirs;
-use crate::dirs::volume;
 use crate::metadata::APPLICATION_NAME;
 
 const CONTAINER_BIN_DIR: &str = formatcp!("/usr/bin/{}", APPLICATION_NAME);
@@ -311,7 +310,6 @@ where
                         config_dir.push(bind.source);
                         config_dir
                     };
-                    dbg!(&source);
                     mounts.push(Mount {
                         source,
                         consistency: Default::default(),

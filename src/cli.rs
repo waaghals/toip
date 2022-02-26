@@ -58,6 +58,8 @@ pub enum Command {
         args: Option<Arguments>,
     },
 
+    Debug {},
+
     /// Run a linked container from another container
     Call {
         /// Configuration script

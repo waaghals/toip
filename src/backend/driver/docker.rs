@@ -8,7 +8,7 @@ use regex::Regex;
 use tokio::process::Command;
 use which::which;
 
-use crate::backend::{BuildArg, Driver, EnvVar, Image, Mount, MountType, Secret, Ssh};
+use crate::backend::{BuildArg, Driver, EnvVar, Image, Mount, Secret, Ssh};
 use crate::oci::image::Reference;
 
 pub struct DockerCliCompatible {

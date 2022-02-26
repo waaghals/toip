@@ -3,10 +3,12 @@ use std::convert::{TryFrom, TryInto};
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
-use std::{error, fmt};
+use std::str::FromStr;
+use std::{error, fmt, str};
 
 use anyhow::{bail, Context, Result};
 use regex::Regex;
+use serde::de::{Error, Visitor};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use serde_derive::{Deserialize as DeriveDeserialize, Serialize as DeriveSerialize};
 
@@ -59,24 +61,28 @@ pub enum ImageSource {
     Build(BuildSource),
 }
 
-#[derive(Debug, Clone, PartialEq, DeriveDeserialize, DeriveSerialize)]
+#[derive(Debug, Clone, PartialEq, DeriveDeserialize)]
 pub struct BindVolume {
+    #[serde(deserialize_with = "substitute_pathbuf")]
     pub source: PathBuf,
     #[serde(default)]
     pub readonly: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, DeriveDeserialize, DeriveSerialize)]
+#[derive(Debug, Clone, PartialEq, DeriveDeserialize)]
 pub struct AnonymousVolume {
+    #[serde(deserialize_with = "substitute_string")]
     pub name: String,
     #[serde(default)]
     pub external: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, DeriveDeserialize, DeriveSerialize)]
-#[serde(untagged)]
+#[derive(Debug, Clone, PartialEq, DeriveDeserialize)]
+#[serde(tag = "type")]
 pub enum Volume {
+    #[serde(rename = "volume")]
     Anonymous(AnonymousVolume),
+    #[serde(rename = "bind")]
     Bind(BindVolume),
 }
 
@@ -201,7 +207,7 @@ impl<'de> Deserialize<'de> for RegistrySource {
     }
 }
 
-#[derive(Debug, DeriveDeserialize, DeriveSerialize, Clone)]
+#[derive(Debug, DeriveDeserialize, Clone)]
 pub struct ContainerConfig {
     pub image: ImageSource,
     pub links: Option<HashMap<String, String>>,
@@ -216,7 +222,7 @@ pub struct ContainerConfig {
     pub inherit_envvars: Option<Vec<String>>,
 }
 
-#[derive(Debug, DeriveDeserialize, DeriveSerialize, Clone)]
+#[derive(Debug, DeriveDeserialize, Clone)]
 pub struct Config {
     pub containers: HashMap<String, ContainerConfig>,
     #[serde(default)]
@@ -224,7 +230,7 @@ pub struct Config {
     pub aliases: HashMap<String, String>,
 }
 
-#[derive(Debug, DeriveDeserialize, DeriveSerialize)]
+#[derive(Debug, DeriveDeserialize)]
 pub struct RuntimeConfig {
     pub container_name: String,
     pub config: Config,
@@ -287,4 +293,57 @@ where
             break None;
         }
     }
+}
+
+struct BytesVisitor;
+
+impl<'de> Visitor<'de> for BytesVisitor {
+    type Value = Vec<u8>;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("a PathBuf")
+    }
+
+    fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        Ok(s.into())
+    }
+
+    fn visit_string<E>(self, s: String) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        Ok(s.into())
+    }
+}
+
+fn substitute_string<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = deserializer.deserialize_str(BytesVisitor)?;
+
+    let substituted = subst::substitute_bytes(value.as_ref(), &subst::Env)
+        .map_err(|err| D::Error::custom(format!("{}", err)))?;
+
+    String::from_utf8(substituted)
+        .map_err(|_err| D::Error::custom(format!("Failed to substitute environment")))
+}
+
+fn substitute_pathbuf<'de, D>(deserializer: D) -> Result<PathBuf, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = deserializer.deserialize_str(BytesVisitor)?;
+
+    let substituted = subst::substitute_bytes(value.as_ref(), &subst::Env)
+        .map_err(|err| D::Error::custom(format!("{}", err)))?;
+
+    let str = str::from_utf8(substituted.as_ref())
+        .map_err(|_err| D::Error::custom(format!("Failed to substitute environment")))?;
+
+    PathBuf::from_str(str)
+        .map_err(|_err| D::Error::custom(format!("Failed to substitute environment")))
 }
