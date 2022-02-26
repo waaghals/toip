@@ -60,17 +60,24 @@ pub enum ImageSource {
 }
 
 #[derive(Debug, Clone, PartialEq, DeriveDeserialize, DeriveSerialize)]
-pub struct NamedVolume {
+pub struct BindVolume {
     pub source: PathBuf,
+    #[serde(default)]
     pub readonly: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, DeriveDeserialize, DeriveSerialize)]
+pub struct AnonymousVolume {
+    pub name: String,
+    #[serde(default)]
+    pub external: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, DeriveDeserialize, DeriveSerialize)]
 #[serde(untagged)]
 pub enum Volume {
-    // Option is never user, but allows end-user to configure any value
-    // Anonymous(Option<String>),
-    Named(NamedVolume),
+    Anonymous(AnonymousVolume),
+    Bind(BindVolume),
 }
 
 impl TryFrom<&str> for RegistrySource {

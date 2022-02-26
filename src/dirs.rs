@@ -104,11 +104,22 @@ fn volumes_dir() -> Result<PathBuf> {
     data_dir("volumes")
 }
 
-pub fn volume<V>(volume: V) -> Result<PathBuf>
+pub fn volume<V, S>(volume: V, seed: Option<S>) -> Result<PathBuf>
 where
     V: AsRef<Path>,
+    S: AsRef<Path>,
 {
     let mut dir = volumes_dir()?;
+    if let Some(seed) = seed {
+        let data = seed
+            .as_ref()
+            .to_str()
+            .ok_or(anyhow!(
+                "cannot convert directory to string to generate volume seed"
+            ))?
+            .as_ref();
+        dir.push(format!("{:x}", Sha256::digest(data)));
+    }
     dir.push(volume);
     Ok(dir)
 }

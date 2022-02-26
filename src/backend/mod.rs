@@ -2,9 +2,9 @@ pub mod driver;
 pub mod script;
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::{env, fmt};
+use std::{env, fmt, fs};
 
 use anyhow::{anyhow, Context, Result};
 use const_format::formatcp;
@@ -12,6 +12,7 @@ use const_format::formatcp;
 use crate::backend::driver::Driver;
 use crate::config::{Config, ContainerConfig, ImageSource, Volume};
 use crate::dirs;
+use crate::dirs::volume;
 use crate::metadata::APPLICATION_NAME;
 
 const CONTAINER_BIN_DIR: &str = formatcp!("/usr/bin/{}", APPLICATION_NAME);
@@ -89,20 +90,23 @@ impl BindNonRecursive {
 }
 
 enum MountType {
-    Volume {
-        source: Option<String>,
-    },
+    // Volume {
+    //     source: Option<String>,
+    // },
     Bind {
         source: PathBuf,
         consistency: BindConsistency,
         bind_propagation: BindPropagation,
         bind_nonrecursive: BindNonRecursive,
     },
-    Tmpfs,
+    // Tmpfs,
 }
 
 pub struct Mount {
-    mount_type: MountType,
+    source: PathBuf,
+    consistency: BindConsistency,
+    propagation: BindPropagation,
+    non_recursive: BindNonRecursive,
     target: PathBuf,
     readonly: bool,
 }
@@ -238,57 +242,81 @@ where
         Ok(image)
     }
 
-    fn create_mounts(
+    fn create_mounts<P>(
         &self,
         image_bin_dir: PathBuf,
         volumes: HashMap<PathBuf, Volume>,
-    ) -> Vec<Mount> {
+        config_dir: P,
+    ) -> Result<Vec<Mount>>
+    where
+        P: Into<PathBuf>,
+    {
         let mut mounts = vec![
             Mount {
-                mount_type: MountType::Bind {
-                    source: image_bin_dir,
-                    consistency: Default::default(),
-                    bind_propagation: Default::default(),
-                    bind_nonrecursive: Default::default(),
-                },
+                source: image_bin_dir,
+                consistency: Default::default(),
+                propagation: Default::default(),
+                non_recursive: Default::default(),
                 target: CONTAINER_BIN_DIR.into(),
                 readonly: true,
             },
             Mount {
-                mount_type: MountType::Bind {
-                    source: self.current_exe.clone(),
-                    consistency: Default::default(),
-                    bind_propagation: Default::default(),
-                    bind_nonrecursive: Default::default(),
-                },
+                source: self.current_exe.clone(),
+                consistency: Default::default(),
+                propagation: Default::default(),
+                non_recursive: Default::default(),
                 target: CONTAINER_BINARY.into(),
                 readonly: true,
             },
             Mount {
-                mount_type: MountType::Bind {
-                    source: self.socket.clone(),
-                    consistency: Default::default(),
-                    bind_propagation: Default::default(),
-                    bind_nonrecursive: Default::default(),
-                },
+                source: self.socket.clone(),
+                consistency: Default::default(),
+                propagation: Default::default(),
+                non_recursive: Default::default(),
                 target: CONTAINER_SOCKET.into(),
                 readonly: true,
             },
         ];
 
+        let config_dir = config_dir.into();
         for (destination, volume) in volumes {
             match volume {
-                // Volume::Anonymous(_) => {
-                //     todo!()
-                // }
-                Volume::Named(named) => {
+                Volume::Anonymous(anonymous) => {
+                    let seed = if anonymous.external {
+                        None
+                    } else {
+                        Some(config_dir.clone())
+                    };
+                    let directory = dirs::volume(anonymous.name, seed.as_ref())?;
+                    fs::create_dir_all(&directory).with_context(|| {
+                        format!(
+                            "could not create volume directory `{}`",
+                            directory.display()
+                        )
+                    })?;
                     mounts.push(Mount {
-                        mount_type: MountType::Bind {
-                            source: named.source.clone(),
-                            consistency: Default::default(),
-                            bind_propagation: Default::default(),
-                            bind_nonrecursive: Default::default(),
-                        },
+                        source: directory,
+                        consistency: Default::default(),
+                        propagation: Default::default(),
+                        non_recursive: Default::default(),
+                        target: destination.clone(),
+                        readonly: false,
+                    });
+                }
+                Volume::Bind(bind) => {
+                    let source = if bind.source.is_absolute() {
+                        bind.source
+                    } else {
+                        let mut config_dir = config_dir.clone();
+                        config_dir.push(bind.source);
+                        config_dir
+                    };
+                    dbg!(&source);
+                    mounts.push(Mount {
+                        source,
+                        consistency: Default::default(),
+                        propagation: Default::default(),
+                        non_recursive: Default::default(),
                         target: destination.clone(),
                         readonly: false,
                     });
@@ -296,7 +324,7 @@ where
             }
         }
 
-        mounts
+        Ok(mounts)
     }
 
     fn create_env_vars(&self, path: &String, config: &ContainerConfig) -> Vec<EnvVar> {
@@ -328,6 +356,7 @@ where
         image: D::Image,
         config: &Config,
         container_config: &ContainerConfig,
+        config_dir: &Path,
         args: Vec<String>,
         stdin: Stdio,
         stdout: Stdio,
@@ -341,12 +370,13 @@ where
             let volume = config
                 .volumes
                 .get(volume_name.as_str())
-                // TODO improve error
-                .ok_or(anyhow!("Missing volume"))?;
+                .ok_or(anyhow!("missing volume `{}` in config", volume_name))?;
             volumes.insert(destination.clone(), volume.clone());
         }
 
-        let mounts = self.create_mounts(image_bin_dir, volumes);
+        let mounts = self
+            .create_mounts(image_bin_dir, volumes, config_dir)
+            .context("could not configure mounts")?;
 
         let path = self
             .driver

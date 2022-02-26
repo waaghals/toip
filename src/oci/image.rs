@@ -348,7 +348,7 @@ impl TryFrom<&str> for Digest {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Digest {
     pub algorithm: Algorithm,
     pub encoded: String,
@@ -388,7 +388,7 @@ impl Serialize for Digest {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub enum Reference {
     Digest(Digest),
     Tag(String),
@@ -403,7 +403,7 @@ impl fmt::Display for Reference {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Algorithm {
     SHA256,
     SHA512,
