@@ -6,7 +6,7 @@ use std::{env, fs};
 use anyhow::{anyhow, Context, Result};
 use futures_util::stream::FuturesUnordered;
 use itertools::join;
-use sha2::{Digest, Sha256};
+use sha2::Digest;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::StreamExt;

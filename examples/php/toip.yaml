@@ -30,6 +30,8 @@ containers:
     workdir: /app
 volumes:
   source_files:
-    source: .
+    type: bind
+    source: ${HOME}
   composer_cache:
-    name: composer_cache
+    type: volume
+    name: ${MISSING:WithDefault}

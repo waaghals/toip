@@ -22,6 +22,7 @@ mod cli;
 mod command;
 mod config;
 mod dirs;
+mod dotenv;
 mod image;
 mod logger;
 mod metadata;
@@ -32,6 +33,8 @@ mod server;
 
 #[tokio::main()]
 async fn main() -> Result<()> {
+    dotenv::load().context("could not load environment variables")?;
+
     let cli = Cli::parse();
     logger::init(cli.verbose.log_level()).context("could not initialize logger")?;
     log::trace!("current pid is `{}`", process::id());
