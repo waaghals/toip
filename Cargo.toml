@@ -47,6 +47,7 @@ indicatif = {version="0.16.2", features=["improved_unicode"]}
 progress-streams = "1.1.0"
 which = "4.2.4"
 subst = "0.1.0"
+dotenv = "0.15.0"
 
 [profile.release]
 codegen-units = 1

@@ -1,6 +1,6 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="run -- install" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
-    <option name="command" value="run install" />
+    <option name="command" value="run --  install" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />
     <option name="channel" value="NIGHTLY" />
     <option name="requiredFeatures" value="true" />

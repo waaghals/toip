@@ -2,7 +2,6 @@
 #![feature(unix_socket_ancillary_data)]
 #![feature(const_mut_refs)]
 #![feature(ready_macro)]
-#![feature(core_intrinsics)]
 // #![deny(missing_docs)]
 
 use std::env;
@@ -24,6 +23,7 @@ mod cli;
 mod command;
 mod config;
 mod dirs;
+mod dotenv;
 mod image;
 mod logger;
 mod metadata;
@@ -34,6 +34,8 @@ mod server;
 
 #[tokio::main()]
 async fn main() -> Result<()> {
+    dotenv::load().context("could not load environment variables")?;
+
     let cli = Cli::parse();
     logger::init(cli.verbose.log_level()).context("could not initialize logger")?;
     log::trace!("current pid is `{}`", process::id());
@@ -64,15 +66,6 @@ async fn main() -> Result<()> {
         } => prepare(ignore_missing, container).await,
         Command::Install { ignore_missing } => install(ignore_missing),
         Command::Inject { shell } => inject(shell),
-        Command::Debug {} => {
-            let current_dir = env::current_dir()?;
-            let config_path =
-                find_config_file(current_dir).ok_or(anyhow!("Unable to find config file"))?;
-            let config_dir = config_path.parent().unwrap().to_path_buf();
-            let config = Config::new_from_dir(&config_dir)?;
-            dbg!(config);
-            Ok(())
-        }
         _ => todo!(),
     }
 }
