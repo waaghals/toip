@@ -5,6 +5,7 @@ aliases:
 containers:
   sh:
     image:
+      type: build
       context: .
       target: runtime
     cmd: sh
@@ -13,6 +14,7 @@ containers:
     workdir: /app
   php8:
     image:
+      type: build
       context: .
       target: runtime
     cmd: php
@@ -21,6 +23,7 @@ containers:
     workdir: /app
   composer:
     image:
+      type: build
       context: .
       target: composer
     cmd: composer

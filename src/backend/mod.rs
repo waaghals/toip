@@ -204,11 +204,50 @@ where
             }
             ImageSource::Build(ref build_image) => {
                 let file = match &build_image.file {
-                    None => PathBuf::from("Dockerfile"),
+                    None => {
+                        let mut path = build_image.context.clone();
+                        path.push("Dockerfile");
+                        path
+                    }
                     Some(file) => file.clone(),
                 };
+
+                let build_args = build_image
+                    .build_args
+                    .iter()
+                    .map(|(key, value)| BuildArg {
+                        name: key.clone(),
+                        value: value.clone().into_inner(),
+                    })
+                    .collect();
+
+                let secrets = build_image
+                    .secrets
+                    .iter()
+                    .map(|(key, value)| Secret {
+                        id: key.clone(),
+                        path: value.clone().into_inner(),
+                    })
+                    .collect();
+
+                let ssh = build_image
+                    .ssh
+                    .iter()
+                    .map(|(key, value)| Ssh {
+                        id: key.clone(),
+                        path: value.clone().into_inner(),
+                    })
+                    .collect();
+
                 self.driver
-                    .build(&build_image.context, file, vec![], vec![], vec![], None)
+                    .build(
+                        &build_image.context,
+                        file,
+                        build_args,
+                        secrets,
+                        ssh,
+                        build_image.target.clone(),
+                    )
                     .await
             }
         }
@@ -222,21 +261,20 @@ where
             .with_context(|| format!("could not create directory `{}`", bin_dir.display()))?;
 
         log::trace!("adding linked container to bin directory");
-        if let Some(links) = &config.links {
-            for (name, target) in links {
-                let mut script_path = bin_dir.clone();
-                script_path.push(&name);
 
-                log::debug!(
-                    "creating nbinary `{}` linked to container `{}` at `{}`",
-                    name,
-                    target,
-                    script_path.to_str().unwrap()
-                );
-                script::create_call(&script_path, CONTAINER_BINARY, target.as_str())
-                    .context("could not create call script")?;
-            }
-        };
+        for (name, target) in &config.links {
+            let mut script_path = bin_dir.clone();
+            script_path.push(&name);
+
+            log::debug!(
+                "creating binary `{}` linked to container `{}` at `{}`",
+                name,
+                target,
+                script_path.to_str().unwrap()
+            );
+            script::create_call(&script_path, CONTAINER_BINARY, target.as_str())
+                .context("could not create call script")?;
+        }
 
         Ok(image)
     }
@@ -303,11 +341,12 @@ where
                     });
                 }
                 Volume::Bind(bind) => {
-                    let source = if bind.source.is_absolute() {
-                        bind.source
+                    let path = bind.source.as_ref();
+                    let source = if path.is_absolute() {
+                        path.to_path_buf()
                     } else {
                         let mut config_dir = config_dir.clone();
-                        config_dir.push(bind.source);
+                        config_dir.push(path);
                         config_dir
                     };
                     mounts.push(Mount {
@@ -327,13 +366,11 @@ where
 
     fn create_env_vars(&self, path: &String, config: &ContainerConfig) -> Vec<EnvVar> {
         let mut envs = vec![];
-        if let Some(env_vars) = &config.env {
-            for (name, value) in env_vars {
-                envs.push(EnvVar {
-                    name: name.clone(),
-                    value: value.clone(),
-                });
-            }
+        for (name, value) in &config.env {
+            envs.push(EnvVar {
+                name: name.clone(),
+                value: value.clone().into_inner(),
+            });
         }
 
         envs.push(EnvVar {
@@ -388,8 +425,8 @@ where
         let env_vars = self.create_env_vars(&path, &container_config);
 
         let cmd = container_config.cmd.clone();
-        // TODO decide what to do with arguments? Does it make sense to configure them?
-        // let args = args.or(config.args.clone());
+        let mut all_args = container_config.args.clone();
+        all_args.extend(args);
         let entrypoint = container_config.entrypoint.clone();
         let workdir = container_config.workdir.clone();
 
@@ -399,7 +436,7 @@ where
                 mounts,
                 entrypoint,
                 cmd,
-                Some(args),
+                Some(all_args),
                 env_vars,
                 vec![],
                 workdir,

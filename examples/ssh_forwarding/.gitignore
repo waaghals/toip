@@ -1,0 +1,2 @@
+# normally you would dotignore this file, but it is kept as an example
+!.env.local

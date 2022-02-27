@@ -212,7 +212,6 @@ impl Driver for DockerCliCompatible {
 
         command.arg("--quiet");
         command.arg(context.as_ref());
-
         command.stdin(Stdio::null());
         command.stderr(Stdio::null());
 
@@ -252,7 +251,6 @@ impl Driver for DockerCliCompatible {
     ) -> Result<()> {
         let mut command = Command::new(&self.binary);
         command.env_clear();
-        dbg!(&args);
 
         command.arg("run");
         command.arg("--rm");

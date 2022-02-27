@@ -1,0 +1,7 @@
+# syntax=docker/dockerfile:1.2
+ARG ALPINE_VERSION
+FROM alpine:${ALPINE_VERSION}
+
+ARG WHO_BUILD_THIS
+ARG FILE_NAME=/tmp/who.txt
+RUN echo $WHO_BUILD_THIS > ${FILE_NAME}

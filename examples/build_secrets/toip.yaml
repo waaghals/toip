@@ -1,0 +1,12 @@
+aliases:
+  build_secrets: build_secrets
+containers:
+  build_secrets:
+    image:
+      type: build
+      context: .
+      secrets:
+        password: password.txt
+    cmd: cat
+    args:
+      - /tmp/baked-in-image.txt

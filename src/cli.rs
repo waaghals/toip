@@ -37,6 +37,7 @@ pub enum Command {
         shell: Shell,
     },
 
+    Debug {},
     /// Build and or pull containers
     Prepare {
         /// Container name
