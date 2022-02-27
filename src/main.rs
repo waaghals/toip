@@ -2,18 +2,20 @@
 #![feature(unix_socket_ancillary_data)]
 #![feature(const_mut_refs)]
 #![feature(ready_macro)]
+#![feature(const_type_id)]
 // #![deny(missing_docs)]
 
 use std::env;
 use std::process::{self};
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use backend::script;
 use clap::Parser;
 use server::CallInfo;
 
 use crate::cli::{Arguments, Cli, Command};
 use crate::command::{call, inject, install, prepare, run};
+use crate::config::{find_config_file, Config};
 use crate::oci::runtime::OciCliRuntime;
 use crate::runtime::generator::{RunGenerator, RuntimeBundleGenerator};
 
@@ -65,6 +67,15 @@ async fn main() -> Result<()> {
         } => prepare(ignore_missing, container).await,
         Command::Install { ignore_missing } => install(ignore_missing),
         Command::Inject { shell } => inject(shell),
+        Command::Debug {} => {
+            let current_dir = env::current_dir()?;
+            let config_path =
+                find_config_file(current_dir).ok_or(anyhow!("Unable to find config file"))?;
+            let config_dir = config_path.parent().unwrap().to_path_buf();
+            let config = Config::new_from_dir(&config_dir)?;
+            dbg!(config);
+            Ok(())
+        }
         _ => todo!(),
     }
 }

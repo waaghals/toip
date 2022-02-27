@@ -1,0 +1,22 @@
+aliases:
+  multiple: multiple
+  simple: simple
+containers:
+  multiple:
+    image:
+      type: build
+      context: ./multiple
+      ssh:
+        github: ${GITHUB_SSH_AUTH_SOCK}
+        gitlab: ${GITLAB_SSH_AUTH_SOCK}
+    cmd: cat
+    args:
+      - /tmp/output.txt
+  simple:
+    image:
+      type: build
+      context: ./simple
+      ssh: default # Uses ${SSH_AUTH_SOCK}
+    cmd: cat
+    args:
+      - /tmp/output.txt

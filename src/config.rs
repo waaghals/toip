@@ -2,15 +2,16 @@ use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::fs::File;
 use std::io::{BufReader, Read};
+use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::{error, fmt, str};
 
 use anyhow::{bail, Context, Result};
 use regex::Regex;
-use serde::de::{Error, Visitor};
+use serde::de::{Error, MapAccess, Unexpected, Visitor};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-use serde_derive::{Deserialize as DeriveDeserialize, Serialize as DeriveSerialize};
+use serde_derive::Deserialize as DeriveDeserialize;
 
 use crate::oci::image::Reference;
 
@@ -35,12 +36,18 @@ impl fmt::Display for RegistrySource {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, DeriveDeserialize, DeriveSerialize)]
+#[derive(Debug, Clone, PartialEq, DeriveDeserialize)]
 pub struct BuildSource {
     pub file: Option<PathBuf>,
     pub target: Option<String>,
     pub context: PathBuf,
-    pub build_args: Option<HashMap<String, String>>,
+    #[serde(default)]
+    pub build_args: HashMap<String, EnvString>,
+    #[serde(default)]
+    pub secrets: HashMap<String, EnvPathBuf>,
+    #[serde(default)]
+    #[serde(deserialize_with = "deserialize_ssh")]
+    pub ssh: HashMap<String, EnvPathBuf>,
 }
 
 impl fmt::Display for BuildSource {
@@ -55,24 +62,24 @@ impl fmt::Display for BuildSource {
 }
 
 #[derive(Debug, Clone, PartialEq, DeriveDeserialize)]
-#[serde(untagged)]
+#[serde(tag = "type")]
 pub enum ImageSource {
+    #[serde(rename = "volume")]
     Registry(RegistrySource),
+    #[serde(rename = "build")]
     Build(BuildSource),
 }
 
 #[derive(Debug, Clone, PartialEq, DeriveDeserialize)]
 pub struct BindVolume {
-    #[serde(deserialize_with = "substitute_pathbuf")]
-    pub source: PathBuf,
+    pub source: EnvPathBuf,
     #[serde(default)]
     pub readonly: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, DeriveDeserialize)]
 pub struct AnonymousVolume {
-    #[serde(deserialize_with = "substitute_string")]
-    pub name: String,
+    pub name: EnvString,
     #[serde(default)]
     pub external: bool,
 }
@@ -210,7 +217,8 @@ impl<'de> Deserialize<'de> for RegistrySource {
 #[derive(Debug, DeriveDeserialize, Clone)]
 pub struct ContainerConfig {
     pub image: ImageSource,
-    pub links: Option<HashMap<String, String>>,
+    #[serde(default)]
+    pub links: HashMap<String, String>,
     pub entrypoint: Option<String>,
     pub workdir: Option<PathBuf>,
     pub cmd: Option<String>,
@@ -218,8 +226,10 @@ pub struct ContainerConfig {
     pub args: Vec<String>,
     #[serde(default)]
     pub volumes: HashMap<PathBuf, String>,
-    pub env: Option<HashMap<String, String>>,
-    pub inherit_envvars: Option<Vec<String>>,
+    #[serde(default)]
+    pub env: HashMap<String, EnvString>,
+    #[serde(default)]
+    pub inherit_envvars: Vec<String>,
 }
 
 #[derive(Debug, DeriveDeserialize, Clone)]
@@ -295,55 +305,127 @@ where
     }
 }
 
-struct BytesVisitor;
+#[derive(Debug, Clone, PartialEq)]
+pub struct EnvSub<T> {
+    substituted: T,
+}
 
-impl<'de> Visitor<'de> for BytesVisitor {
-    type Value = Vec<u8>;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("a PathBuf")
-    }
-
-    fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
-    where
-        E: Error,
-    {
-        Ok(s.into())
-    }
-
-    fn visit_string<E>(self, s: String) -> Result<Self::Value, E>
-    where
-        E: Error,
-    {
-        Ok(s.into())
+impl<T> EnvSub<T> {
+    pub fn into_inner(self) -> T {
+        self.substituted
     }
 }
 
-fn substitute_string<'de, D>(deserializer: D) -> Result<String, D::Error>
+impl<T> AsRef<Path> for EnvSub<T>
 where
-    D: Deserializer<'de>,
+    T: AsRef<Path>,
 {
-    let value = deserializer.deserialize_str(BytesVisitor)?;
-
-    let substituted = subst::substitute_bytes(value.as_ref(), &subst::Env)
-        .map_err(|err| D::Error::custom(format!("{}", err)))?;
-
-    String::from_utf8(substituted)
-        .map_err(|_err| D::Error::custom(format!("Failed to substitute environment")))
+    fn as_ref(&self) -> &Path {
+        self.substituted.as_ref()
+    }
 }
 
-fn substitute_pathbuf<'de, D>(deserializer: D) -> Result<PathBuf, D::Error>
+type EnvPathBuf = EnvSub<PathBuf>;
+type EnvString = EnvSub<String>;
+
+impl<'de, T> Deserialize<'de> for EnvSub<T>
+where
+    T: Deserialize<'de> + FromStr,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct SubstitutingVisitor<T>(PhantomData<fn() -> T>);
+
+        impl<'de, T> Visitor<'de> for SubstitutingVisitor<T>
+        where
+            T: Deserialize<'de> + FromStr,
+        {
+            type Value = T;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("string or anything")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<T, E>
+            where
+                E: de::Error,
+            {
+                let substituted = subst::substitute(value, &subst::Env)
+                    .map_err(|err| de::Error::custom(format!("{}", err)))?;
+
+                T::from_str(substituted.as_str())
+                    .map_err(|_| de::Error::custom(format!("Failed to parse `{}`", substituted)))
+            }
+
+            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                Deserialize::deserialize(de::value::BytesDeserializer::new(v))
+            }
+
+            // fn visit_seq<A>(self, v: A) -> Result<Self::Value, A::Error>
+            // where
+            //     A: SeqAccess<'de>,
+            // {
+            //     Deserialize::deserialize(de::value::SeqDeserializer::new(v))
+            // }
+
+            fn visit_map<A>(self, v: A) -> Result<Self::Value, A::Error>
+            where
+                A: MapAccess<'de>,
+            {
+                Deserialize::deserialize(de::value::MapAccessDeserializer::new(v))
+            }
+        }
+
+        let value = deserializer.deserialize_any(SubstitutingVisitor(PhantomData))?;
+        Ok(EnvSub { substituted: value })
+    }
+}
+
+fn deserialize_ssh<'de, D>(deserializer: D) -> Result<HashMap<String, EnvPathBuf>, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let value = deserializer.deserialize_str(BytesVisitor)?;
+    struct SshVisitor;
 
-    let substituted = subst::substitute_bytes(value.as_ref(), &subst::Env)
-        .map_err(|err| D::Error::custom(format!("{}", err)))?;
+    impl<'de> Visitor<'de> for SshVisitor {
+        type Value = HashMap<String, EnvPathBuf>;
 
-    let str = str::from_utf8(substituted.as_ref())
-        .map_err(|_err| D::Error::custom(format!("Failed to substitute environment")))?;
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("string or map")
+        }
 
-    PathBuf::from_str(str)
-        .map_err(|_err| D::Error::custom(format!("Failed to substitute environment")))
+        fn visit_str<E>(self, value: &str) -> Result<HashMap<String, EnvPathBuf>, E>
+        where
+            E: de::Error,
+        {
+            if value != "default" {
+                Err(de::Error::invalid_value(Unexpected::Str(value), &"default"))
+            } else {
+                let mut map = HashMap::new();
+                let socket = std::env::var("SSH_AUTH_SOCK")
+                    .map_err(|_| de::Error::custom("Missing environment variable `SSH_AUTH_SOCK`. Consider configuring it in `.env.local`"))?;
+                map.insert(
+                    "default".to_owned(),
+                    EnvSub {
+                        substituted: PathBuf::from(socket),
+                    },
+                );
+                Ok(map)
+            }
+        }
+
+        fn visit_map<M>(self, map: M) -> Result<HashMap<String, EnvPathBuf>, M::Error>
+        where
+            M: MapAccess<'de>,
+        {
+            Deserialize::deserialize(de::value::MapAccessDeserializer::new(map))
+        }
+    }
+
+    deserializer.deserialize_any(SshVisitor)
 }

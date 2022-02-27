@@ -312,9 +312,11 @@ fn build_env(image: Image, config: ContainerConfig) -> Vec<String> {
         }
     }
 
-    if let Some(envs) = config.env {
-        map.extend(envs);
-    }
+    let envs = config
+        .env
+        .into_iter()
+        .map(|(key, value)| (key, value.into_inner()));
+    map.extend(envs);
 
     // TODO add inherted envvars from calling process
     let bin_dir = CONTAINER_BIN_DIR.to_string();
@@ -407,21 +409,20 @@ impl RuntimeBundleGenerator for RunGenerator {
         config_file.push("config.json");
 
         log::trace!("adding linked containers to bin directory");
-        if let Some(links) = &config.links {
-            for (name, container) in links {
-                let mut script_path = bin_dir.clone();
-                script_path.push(name);
 
-                log::debug!(
-                    "creating binary `{}` linked to container `{}` at `{}`",
-                    name,
-                    container,
-                    script_path.to_str().unwrap()
-                );
-                script::create_call(&script_path, CONTAINER_BINARY, container)
-                    .context("could not create call script")?;
-            }
-        };
+        for (name, container) in &config.links {
+            let mut script_path = bin_dir.clone();
+            script_path.push(name);
+
+            log::debug!(
+                "creating binary `{}` linked to container `{}` at `{}`",
+                name,
+                container,
+                script_path.to_str().unwrap()
+            );
+            script::create_call(&script_path, CONTAINER_BINARY, container)
+                .context("could not create call script")?;
+        }
 
         let current = env::current_exe().context("could not determin current executable")?;
 
