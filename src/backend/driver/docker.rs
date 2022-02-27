@@ -212,9 +212,6 @@ impl Driver for DockerCliCompatible {
 
         command.arg("--quiet");
         command.arg(context.as_ref());
-
-        dbg!(&command);
-
         command.stdin(Stdio::null());
         command.stderr(Stdio::null());
 
