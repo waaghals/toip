@@ -72,14 +72,24 @@ pub enum ImageSource {
 
 #[derive(Debug, Clone, PartialEq, DeriveDeserialize)]
 pub struct BindVolume {
+<<<<<<< HEAD
     pub source: EnvPathBuf,
+=======
+    #[serde(deserialize_with = "substitute_pathbuf")]
+    pub source: PathBuf,
+>>>>>>> main
     #[serde(default)]
     pub readonly: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, DeriveDeserialize)]
 pub struct AnonymousVolume {
+<<<<<<< HEAD
     pub name: EnvString,
+=======
+    #[serde(deserialize_with = "substitute_string")]
+    pub name: String,
+>>>>>>> main
     #[serde(default)]
     pub external: bool,
 }
@@ -305,6 +315,7 @@ where
     }
 }
 
+<<<<<<< HEAD
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnvSub<T> {
     substituted: T,
@@ -428,4 +439,57 @@ where
     }
 
     deserializer.deserialize_any(SshVisitor)
+=======
+struct BytesVisitor;
+
+impl<'de> Visitor<'de> for BytesVisitor {
+    type Value = Vec<u8>;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("a PathBuf")
+    }
+
+    fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        Ok(s.into())
+    }
+
+    fn visit_string<E>(self, s: String) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        Ok(s.into())
+    }
+}
+
+fn substitute_string<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = deserializer.deserialize_str(BytesVisitor)?;
+
+    let substituted = subst::substitute_bytes(value.as_ref(), &subst::Env)
+        .map_err(|err| D::Error::custom(format!("{}", err)))?;
+
+    String::from_utf8(substituted)
+        .map_err(|_err| D::Error::custom(format!("Failed to substitute environment")))
+}
+
+fn substitute_pathbuf<'de, D>(deserializer: D) -> Result<PathBuf, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = deserializer.deserialize_str(BytesVisitor)?;
+
+    let substituted = subst::substitute_bytes(value.as_ref(), &subst::Env)
+        .map_err(|err| D::Error::custom(format!("{}", err)))?;
+
+    let str = str::from_utf8(substituted.as_ref())
+        .map_err(|_err| D::Error::custom(format!("Failed to substitute environment")))?;
+
+    PathBuf::from_str(str)
+        .map_err(|_err| D::Error::custom(format!("Failed to substitute environment")))
+>>>>>>> main
 }
