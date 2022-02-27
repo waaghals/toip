@@ -1,11 +1,7 @@
-use std::fs::File;
 use std::io::ErrorKind;
-use std::{env, fs};
 
-use anyhow::{Context, Result};
-use dotenv::{dotenv, Error};
-use futures_util::future::err;
-use itertools::Itertools;
+use anyhow::Result;
+use dotenv::Error;
 
 pub fn load() -> Result<()> {
     for file in vec![".env.local", ".env"] {

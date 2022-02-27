@@ -7,14 +7,13 @@
 use std::env;
 use std::process::{self};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use backend::script;
 use clap::Parser;
 use server::CallInfo;
 
 use crate::cli::{Arguments, Cli, Command};
 use crate::command::{call, inject, install, prepare, run};
-use crate::config::{find_config_file, Config};
 use crate::oci::runtime::OciCliRuntime;
 use crate::runtime::generator::{RunGenerator, RuntimeBundleGenerator};
 
