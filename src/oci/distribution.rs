@@ -30,20 +30,13 @@ use tower_http::follow_redirect::{FollowRedirect, FollowRedirectLayer};
 use tower_http::map_response_body::{MapResponseBody, MapResponseBodyLayer};
 use tower_http::set_header::{SetRequestHeader, SetRequestHeaderLayer};
 
-use super::image::{
-    Algorithm,
-    Descriptor,
-    Digest,
-    Image,
-    Manifest,
-    ManifestItem,
-    ManifestList,
-    Reference,
-};
+use super::image::{Descriptor, Image, Manifest, ManifestItem, ManifestList};
+use crate::config::{Digest, Reference};
 use crate::dirs::blobs_dir;
 use crate::metadata;
 use crate::progress_bar::bytes_style;
 
+#[deprecated]
 #[derive(Debug)]
 enum Context<'a> {
     Descriptor(&'a Descriptor),
@@ -58,11 +51,13 @@ impl fmt::Display for Context<'_> {
     }
 }
 
+#[deprecated]
 struct Response {
     bytes: Vec<u8>,
     content_type: String,
 }
 
+#[deprecated]
 #[async_trait]
 trait Downloader {
     async fn download(
@@ -73,6 +68,7 @@ trait Downloader {
     ) -> Result<Response>;
 }
 
+#[deprecated]
 #[async_trait]
 pub trait Registry {
     async fn manifest(&self, host: &str, name: &str, reference: &Reference) -> Result<Manifest>;
@@ -80,6 +76,7 @@ pub trait Registry {
     async fn layer(&self, host: &str, name: &str, descriptor: &Descriptor) -> Result<Vec<u8>>;
 }
 
+#[deprecated]
 pub struct OciRegistry {
     // TODO cleanup this type. Cannot use Box<dyn ...> because of generic arguments in a method
     downloader: DecompressDownloader<
@@ -224,6 +221,7 @@ impl Registry for OciRegistry {
     }
 }
 
+#[deprecated]
 #[derive(Debug)]
 pub struct TowerDownloader {
     client: Arc<
@@ -243,6 +241,7 @@ pub struct TowerDownloader {
     >,
 }
 
+#[deprecated]
 struct ProgressBody {
     progress: ProgressBar,
     inner: Body,
@@ -371,6 +370,7 @@ impl Downloader for TowerDownloader {
     }
 }
 
+#[deprecated]
 #[derive(Debug)]
 struct VerifyingDownloader<T> {
     context: &'static str,
@@ -413,6 +413,7 @@ impl<T> VerifyingDownloader<T> {
     }
 }
 
+#[deprecated]
 #[derive(Debug, Error)]
 pub enum VerifyError {
     #[error("expected size `{expected}` is not equal to the calculated size `{actual}` when verifying within context `{context}`")]
@@ -478,6 +479,7 @@ where
     }
 }
 
+#[deprecated]
 #[derive(Debug)]
 struct DecompressDownloader<T> {
     inner: T,

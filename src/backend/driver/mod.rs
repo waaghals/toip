@@ -7,21 +7,16 @@ use anyhow::Result;
 use async_trait::async_trait;
 pub use docker::DockerCliCompatible;
 
-use crate::backend::{BuildArg, EnvVar, Image, Mount, Secret, Ssh};
-use crate::oci::image::Reference;
+use crate::backend::{BuildArg, EnvVar, Mount, Secret, Ssh};
+use crate::config::{Reference, RegistrySource};
 
 #[async_trait]
 pub trait Driver {
-    type Image: Image;
+    async fn path(&self, _repository: &str, _reference: &Reference) -> Result<Option<String>> {
+        Ok(None)
+    }
 
-    async fn path(&self, image: &Self::Image) -> Result<Option<String>>;
-
-    async fn pull(
-        &self,
-        registry: &str,
-        repository: &str,
-        reference: &Reference,
-    ) -> Result<Self::Image>;
+    async fn pull(&self, image: &RegistrySource) -> Result<()>;
 
     async fn build<C, F>(
         &self,
@@ -31,14 +26,17 @@ pub trait Driver {
         secrets: Vec<Secret>,
         ssh_sockets: Vec<Ssh>,
         target: Option<String>,
-    ) -> Result<Self::Image>
+        repository: &str,
+        reference: &Reference,
+    ) -> Result<()>
     where
         C: AsRef<Path> + Send,
         F: AsRef<Path> + Send;
 
     async fn run(
         &self,
-        image: Self::Image,
+        repository: &str,
+        reference: &Reference,
         mounts: Vec<Mount>,
         entrypoint: Option<String>,
         cmd: Option<String>,

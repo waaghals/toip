@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
@@ -9,7 +8,7 @@ use tokio::process::Command;
 use which::which;
 
 use crate::backend::{BuildArg, Driver, EnvVar, Image, Mount, Secret, Ssh};
-use crate::oci::image::Reference;
+use crate::config::{Reference, RegistrySource};
 
 pub struct DockerCliCompatible {
     binary: PathBuf,
@@ -36,7 +35,7 @@ impl DockerCliCompatible {
             .find(|(_client, binary)| binary.is_ok());
 
         let (client, binary) =
-            first_supported.ok_or(anyhow!("No supported driver installed in $PATH"))?;
+            first_supported.ok_or_else(|| anyhow!("No supported driver installed in $PATH"))?;
         log::info!("using client `{}`", client);
 
         Ok(match client {
@@ -68,9 +67,7 @@ impl Default for DockerCliCompatible {
 
 #[async_trait]
 impl Driver for DockerCliCompatible {
-    type Image = DockerImage;
-
-    async fn path(&self, image: &Self::Image) -> Result<Option<String>> {
+    async fn path(&self, repository: &str, reference: &Reference) -> Result<Option<String>> {
         let mut command = Command::new(&self.binary);
         if let Some(argument) = &self.argument {
             command.arg(argument);
@@ -78,7 +75,10 @@ impl Driver for DockerCliCompatible {
 
         command.arg("inspect");
         command.arg("--format={{json .Config.Env}}");
-        command.arg(image.id());
+        match reference {
+            Reference::Digest(digest) => command.arg(format!("{}@{}", repository, digest)),
+            Reference::Tag(tag) => command.arg(format!("{}:{}", repository, tag)),
+        };
 
         command.stdin(Stdio::null());
         command.stderr(Stdio::null());
@@ -92,33 +92,23 @@ impl Driver for DockerCliCompatible {
         let regex = Regex::new(r#"PATH=([^"]+)"#).unwrap();
         let captures = regex.captures(&output_utf8);
         let path = captures
-            .map(|captures| {
+            .and_then(|captures| {
                 let capture = captures.get(1);
                 capture.map(|capture| capture.as_str())
             })
-            .flatten()
             .map(|path| path.to_string());
 
         Ok(path)
     }
 
-    async fn pull(
-        &self,
-        registry: &str,
-        repository: &str,
-        reference: &Reference,
-    ) -> Result<Self::Image> {
-        let name = match reference {
-            Reference::Digest(digest) => format!("{}/{}@{}", registry, repository, digest),
-            Reference::Tag(tag) => format!("{}/{}:{}", registry, repository, tag),
-        };
+    async fn pull(&self, image: &RegistrySource) -> Result<()> {
         let mut pull_command = Command::new(&self.binary);
         if let Some(argument) = &self.argument {
             pull_command.arg(argument);
         }
         pull_command.env_clear();
         pull_command.arg("pull");
-        pull_command.arg(&name);
+        pull_command.arg(format!("{}", image));
 
         pull_command.stdin(Stdio::null());
         pull_command.stdout(Stdio::null());
@@ -133,33 +123,7 @@ impl Driver for DockerCliCompatible {
             bail!("pull command failed");
         }
 
-        let mut inspect_command = Command::new(&self.binary);
-        if let Some(argument) = &self.argument {
-            inspect_command.arg(argument);
-        }
-        inspect_command.arg("inspect");
-        inspect_command.arg("--format={{.Id}}");
-        inspect_command.arg(&name);
-
-        inspect_command.stdin(Stdio::null());
-        inspect_command.stderr(Stdio::null());
-
-        let output = inspect_command
-            .output()
-            .await
-            .context("could not run inspect command")?;
-
-        if !output.status.success() {
-            bail!("inspect command failed");
-        }
-
-        let output_utf8 = String::from_utf8_lossy(&output.stdout);
-        let image_id = match output_utf8.strip_suffix("\n") {
-            None => output_utf8,
-            Some(trimmed) => Cow::Borrowed(trimmed),
-        };
-
-        Ok(DockerImage(image_id.to_string()))
+        Ok(())
     }
 
     async fn build<C, F>(
@@ -170,7 +134,9 @@ impl Driver for DockerCliCompatible {
         secrets: Vec<Secret>,
         ssh_sockets: Vec<Ssh>,
         target: Option<String>,
-    ) -> Result<Self::Image>
+        repository: &str,
+        reference: &Reference,
+    ) -> Result<()>
     where
         C: AsRef<Path> + Send,
         F: AsRef<Path> + Send,
@@ -210,6 +176,12 @@ impl Driver for DockerCliCompatible {
             command.arg(target);
         }
 
+        command.arg("--tag");
+        match reference {
+            Reference::Digest(digest) => command.arg(format!("{}@{}", repository, digest)),
+            Reference::Tag(tag) => command.arg(format!("{}:{}", repository, tag)),
+        };
+
         command.arg("--quiet");
         command.arg(context.as_ref());
         command.stdin(Stdio::null());
@@ -225,18 +197,13 @@ impl Driver for DockerCliCompatible {
             bail!("prepare command failed");
         }
 
-        let output_utf8 = String::from_utf8_lossy(&output.stdout);
-        let image_id = match output_utf8.strip_suffix("\n") {
-            None => output_utf8,
-            Some(trimmed) => Cow::Borrowed(trimmed),
-        };
-
-        Ok(DockerImage(image_id.to_string()))
+        Ok(())
     }
 
     async fn run(
         &self,
-        image: Self::Image,
+        repository: &str,
+        reference: &Reference,
         mounts: Vec<Mount>,
         entrypoint: Option<String>,
         cmd: Option<String>,
@@ -309,7 +276,10 @@ impl Driver for DockerCliCompatible {
             }
         }
 
-        command.arg(image.id());
+        match reference {
+            Reference::Digest(digest) => command.arg(format!("{}@{}", repository, digest)),
+            Reference::Tag(tag) => command.arg(format!("{}:{}", repository, tag)),
+        };
 
         if let Some(cmd) = cmd {
             command.arg(cmd);

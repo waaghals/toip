@@ -1,28 +1,38 @@
 use std::collections::HashMap;
-use std::convert::{TryFrom, TryInto};
+use std::convert::{Infallible, TryFrom, TryInto};
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::{error, fmt, str};
+use std::{fmt, str};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use regex::Regex;
 use serde::de::{Error, MapAccess, Unexpected, Visitor};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-use serde_derive::Deserialize as DeriveDeserialize;
+use serde_derive::{Deserialize as DeriveDeserialize, Serialize as DeriveSerialize};
 
-use crate::oci::image::Reference;
-
-const REGISTRY_PATTERN: &str = r"^(?:(?P<registry>(?:[a-zA-Z0-9]+\.[a-zA-Z0-9.]+?)|[a-zA-Z0-9]+\.)/)?(?P<repository>[a-z0-9][a-z0-9._-]*(?:/[a-z0-9][a-z0-9._-]*)?)(?:(?::(?P<tag>[a-zA-Z0-9_][a-zA-Z0-9._-]+))|@(?P<digest>[a-zA-Z0-9]+:[a-zA-Z0-9]+))?$";
 const CONFIG_FILE_NAME: &str = "toip.yaml";
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, DeriveDeserialize, DeriveSerialize)]
 pub struct RegistrySource {
+    #[serde(default)]
     pub registry: String,
     pub repository: String,
+    #[serde(default)]
     pub reference: Reference,
+}
+
+impl Default for RegistrySource {
+    fn default() -> Self {
+        RegistrySource {
+            registry: "localhost".to_string(),
+            // TODO hash based on container config
+            repository: "123456789".to_string(),
+            reference: Default::default(),
+        }
+    }
 }
 
 impl fmt::Display for RegistrySource {
@@ -36,7 +46,143 @@ impl fmt::Display for RegistrySource {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, DeriveDeserialize)]
+const REGISTRY_PATTERN: &str = r"^(?:(?P<registry>(?:[a-zA-Z0-9]+\.[a-zA-Z0-9.]+?)|[a-zA-Z0-9]+\.)/)?(?P<repository>[a-z0-9][a-z0-9._-]*(?:/[a-z0-9][a-z0-9._-]*)?)(?:(?::(?P<tag>[a-zA-Z0-9_][a-zA-Z0-9._-]*))|@(?P<digest>[a-zA-Z0-9]+:[a-zA-Z0-9]+))?$";
+impl TryFrom<&str> for RegistrySource {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let regex = Regex::new(REGISTRY_PATTERN).unwrap();
+        let captures = regex
+            .captures(value)
+            .with_context(|| format!("image reference `{}` could not be parsed.", value))?;
+
+        let registry = match captures.name("registry") {
+            Some(registry_match) => registry_match.as_str(),
+            None => "registry-1.docker.io",
+        };
+        let reference = match captures.name("digest") {
+            Some(digest_match) => {
+                let string = digest_match.as_str();
+                let digest = string
+                    .try_into()
+                    .with_context(|| format!("could not parse digest `{}`", string))?;
+                Reference::Digest(digest)
+            }
+            None => match captures.name("tag") {
+                Some(tag) => Reference::Tag(tag.as_str().to_string()),
+                None => Reference::Tag("latest".to_string()),
+            },
+        };
+        let repository = captures.name("repository").unwrap().as_str();
+
+        Ok(RegistrySource {
+            registry: registry.into(),
+            repository: repository.into(),
+            reference,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, DeriveSerialize, DeriveDeserialize)]
+pub enum Reference {
+    Digest(Digest),
+    Tag(String),
+}
+
+impl Default for Reference {
+    fn default() -> Self {
+        Reference::Tag("latest".to_owned())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Digest {
+    pub algorithm: Algorithm,
+    pub encoded: String,
+}
+
+impl fmt::Display for Digest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{}", &self.algorithm, &self.encoded)
+    }
+}
+
+const DIGEST_PATTERN: &str =
+    "^(?P<algorithm>[a-z0-9]+(?:[+._-][a-z0-9]+)?):(?P<encoded>[a-zA-Z0-9=_-]+)$";
+impl TryFrom<&str> for Digest {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let regex = Regex::new(DIGEST_PATTERN).unwrap();
+        let captures = regex
+            .captures(value)
+            .ok_or_else(|| anyhow!("failed to parse digest from `{}`", value))?;
+
+        let captured_algorithm = captures.name("algorithm").unwrap().as_str();
+        let encoded = captures.name("encoded").unwrap().as_str();
+
+        let algorithm = match captured_algorithm {
+            "sha256" => Ok(Algorithm::SHA256),
+            "sha512" => Ok(Algorithm::SHA512),
+            _ => Err(anyhow!(
+                "unsupported algorithm `{}` in digest `{}`",
+                captured_algorithm,
+                value
+            )),
+        }?;
+
+        Ok(Digest {
+            algorithm,
+            encoded: encoded.to_string(),
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for Digest {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let string = String::deserialize(deserializer)?;
+        Digest::try_from(string.as_str()).map_err(de::Error::custom)
+    }
+}
+
+impl Serialize for Digest {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let val = format!("{}:{}", &self.algorithm, &self.encoded);
+        serializer.serialize_str(val.as_str())
+    }
+}
+
+impl fmt::Display for Reference {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Reference::Digest(digest) => write!(f, "{}", digest),
+            Reference::Tag(tag) => write!(f, "{}", tag),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, DeriveSerialize)]
+pub enum Algorithm {
+    SHA256,
+    SHA512,
+}
+
+impl fmt::Display for Algorithm {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Algorithm::SHA256 => write!(f, "sha256"),
+            Algorithm::SHA512 => write!(f, "sha512"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Default, DeriveDeserialize, DeriveSerialize)]
 pub struct BuildSource {
     pub file: Option<PathBuf>,
     pub target: Option<String>,
@@ -61,13 +207,16 @@ impl fmt::Display for BuildSource {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, DeriveDeserialize)]
-#[serde(tag = "type")]
-pub enum ImageSource {
-    #[serde(rename = "volume")]
-    Registry(RegistrySource),
-    #[serde(rename = "build")]
-    Build(BuildSource),
+impl FromStr for BuildSource {
+    type Err = Infallible;
+
+    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
+        let context = PathBuf::from_str(value)?;
+        Ok(BuildSource {
+            context,
+            ..Default::default()
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, DeriveDeserialize)]
@@ -93,130 +242,14 @@ pub enum Volume {
     Bind(BindVolume),
 }
 
-impl TryFrom<&str> for RegistrySource {
-    type Error = ParseImageError;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        let regex = Regex::new(REGISTRY_PATTERN).unwrap();
-        let captures = regex
-            .captures(value)
-            .with_context(|| format!("image reference `{}` could not be parsed.", value))
-            .map_err(|_| ParseImageError::InvalidRegistry)?;
-
-        let registry = match captures.name("registry") {
-            Some(registry_match) => registry_match.as_str(),
-            None => "registry-1.docker.io",
-        };
-        let reference = match captures.name("digest") {
-            Some(digest_match) => {
-                let digest = digest_match
-                    .as_str()
-                    .try_into()
-                    .map_err(|_| ParseImageError::InvalidRegistry)?;
-                Reference::Digest(digest)
-            }
-            None => match captures.name("tag") {
-                Some(tag) => Reference::Tag(tag.as_str().to_string()),
-                None => Reference::Tag("latest".to_string()),
-            },
-        };
-        let repository = captures.name("repository").unwrap().as_str();
-
-        Ok(RegistrySource {
-            registry: registry.into(),
-            repository: repository.into(),
-            reference,
-        })
-    }
-}
-
-impl TryFrom<&str> for BuildSource {
-    type Error = ParseImageError;
-
-    fn try_from(_value: &str) -> Result<Self, Self::Error> {
-        todo!()
-    }
-}
-
-impl TryFrom<&str> for ImageSource {
-    type Error = ParseImageError;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        if let Some(part) = value.strip_prefix("registry://") {
-            let registry = part.try_into()?;
-            Ok(ImageSource::Registry(registry))
-        } else if let Some(part) = value.strip_prefix("build://") {
-            let config = part.try_into()?;
-            Ok(ImageSource::Build(config))
-        } else {
-            Err(ParseImageError::UnknownScheme)
-        }
-    }
-}
-
-impl fmt::Display for ImageSource {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ImageSource::Registry(registry) => write!(f, "registry://{}", registry),
-            ImageSource::Build(build) => write!(f, "build://{}", build),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum ParseImageError {
-    UnknownScheme,
-    InvalidRegistry,
-    InvalidPath,
-    InvalidBuild,
-}
-
-impl fmt::Display for ParseImageError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ParseImageError::InvalidBuild => write!(f, "invalid image build"),
-            ParseImageError::InvalidPath => write!(f, "invalid image path"),
-            ParseImageError::InvalidRegistry => write!(f, "invalid image registry"),
-            ParseImageError::UnknownScheme => write!(f, "unknown image scheme"),
-        }
-    }
-}
-
-impl error::Error for ParseImageError {}
-
-// impl<'de> Deserialize<'de> for ImageSource {
-//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-//     where
-//         D: Deserializer<'de>,
-//     {
-//         let string = String::deserialize(deserializer)?;
-//         ImageSource::try_from(string.as_str()).map_err(de::Error::custom)
-//     }
-// }
-
-impl Serialize for ImageSource {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let val = format!("{}", self);
-        serializer.serialize_str(val.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for RegistrySource {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let string = String::deserialize(deserializer)?;
-        RegistrySource::try_from(string.as_str()).map_err(de::Error::custom)
-    }
-}
-
-#[derive(Debug, DeriveDeserialize, Clone)]
+#[derive(Debug, DeriveDeserialize, DeriveSerialize, Clone)]
 pub struct ContainerConfig {
-    pub image: ImageSource,
+    #[serde(default)]
+    #[serde(deserialize_with = "registry")]
+    pub image: Option<RegistrySource>,
+    #[serde(default)]
+    #[serde(deserialize_with = "build")]
+    pub build: Option<BuildSource>,
     #[serde(default)]
     pub links: HashMap<String, String>,
     pub entrypoint: Option<String>,
@@ -305,7 +338,7 @@ where
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, DeriveSerialize)]
 pub struct EnvSub<T> {
     substituted: T,
 }
@@ -366,13 +399,6 @@ where
                 Deserialize::deserialize(de::value::BytesDeserializer::new(v))
             }
 
-            // fn visit_seq<A>(self, v: A) -> Result<Self::Value, A::Error>
-            // where
-            //     A: SeqAccess<'de>,
-            // {
-            //     Deserialize::deserialize(de::value::SeqDeserializer::new(v))
-            // }
-
             fn visit_map<A>(self, v: A) -> Result<Self::Value, A::Error>
             where
                 A: MapAccess<'de>,
@@ -428,4 +454,113 @@ where
     }
 
     deserializer.deserialize_any(SshVisitor)
+}
+
+fn build<'de, D>(deserializer: D) -> Result<Option<BuildSource>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct BuildSourceVisitor;
+
+    impl<'de> Visitor<'de> for BuildSourceVisitor {
+        type Value = Option<BuildSource>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("string or map")
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            let result = BuildSource::from_str(value).unwrap();
+            Ok(Some(result))
+        }
+
+        fn visit_unit<E>(self) -> std::result::Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Ok(None)
+        }
+
+        fn visit_none<E>(self) -> std::result::Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Ok(None)
+        }
+
+        fn visit_some<D>(self, deserializer: D) -> std::result::Result<Self::Value, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            BuildSource::deserialize(deserializer).map(Some)
+        }
+
+        fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
+        where
+            M: MapAccess<'de>,
+        {
+            let result = Deserialize::deserialize(de::value::MapAccessDeserializer::new(map))?;
+            Ok(Some(result))
+        }
+    }
+
+    deserializer.deserialize_any(BuildSourceVisitor)
+}
+
+fn registry<'de, D>(deserializer: D) -> Result<Option<RegistrySource>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct RegistrySourceVisitor;
+
+    impl<'de> Visitor<'de> for RegistrySourceVisitor {
+        type Value = Option<RegistrySource>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("string or map")
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            let result = RegistrySource::try_from(value)
+                .map_err(|err| de::Error::custom(err.to_string()))?;
+            Ok(Some(result))
+        }
+
+        fn visit_unit<E>(self) -> std::result::Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Ok(None)
+        }
+
+        fn visit_none<E>(self) -> std::result::Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Ok(None)
+        }
+
+        fn visit_some<D>(self, deserializer: D) -> std::result::Result<Self::Value, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            RegistrySource::deserialize(deserializer).map(Some)
+        }
+
+        fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
+        where
+            M: MapAccess<'de>,
+        {
+            let result = Deserialize::deserialize(de::value::MapAccessDeserializer::new(map))?;
+            Ok(Some(result))
+        }
+    }
+
+    deserializer.deserialize_any(RegistrySourceVisitor)
 }

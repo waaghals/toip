@@ -348,12 +348,14 @@ impl TryFrom<&str> for Digest {
     }
 }
 
+#[deprecated]
 #[derive(Debug, Clone, PartialEq)]
 pub struct Digest {
     pub algorithm: Algorithm,
     pub encoded: String,
 }
 
+#[deprecated]
 #[derive(Clone, Debug, PartialEq, Error)]
 pub enum ParseDigestError {
     #[error("unparsable digest `{input}`")]
@@ -388,6 +390,7 @@ impl Serialize for Digest {
     }
 }
 
+#[deprecated]
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub enum Reference {
     Digest(Digest),
@@ -403,6 +406,7 @@ impl fmt::Display for Reference {
     }
 }
 
+#[deprecated]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Algorithm {
     SHA256,

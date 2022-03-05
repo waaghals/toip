@@ -114,9 +114,7 @@ where
         let data = seed
             .as_ref()
             .to_str()
-            .ok_or(anyhow!(
-                "cannot convert directory to string to generate volume seed"
-            ))?
+            .ok_or_else(|| anyhow!("cannot convert directory to string to generate volume seed"))?
             .as_ref();
         dir.push(format!("{:x}", Sha256::digest(data)));
     }
@@ -131,9 +129,9 @@ where
     let data = dir
         .as_ref()
         .to_str()
-        .ok_or(anyhow!(
-            "cannot convert directory to string to generate script directory hash"
-        ))?
+        .ok_or_else(|| {
+            anyhow!("cannot convert directory to string to generate script directory hash")
+        })?
         .as_ref();
     let digest = format!("{:x}", Sha256::digest(data));
 

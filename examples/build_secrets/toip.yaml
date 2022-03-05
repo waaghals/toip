@@ -2,8 +2,7 @@ aliases:
   build_secrets: build_secrets
 containers:
   build_secrets:
-    image:
-      type: build
+    build:
       context: .
       secrets:
         password: password.txt

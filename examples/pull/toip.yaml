@@ -1,0 +1,6 @@
+aliases:
+  pull: pull
+containers:
+  pull:
+    image: alpine:3
+    cmd: sh

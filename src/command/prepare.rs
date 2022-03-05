@@ -12,7 +12,7 @@ async fn prepare_config(config: &Config, container: Option<String>) -> Result<()
     match container {
         Some(name) => {
             let container = config
-                .get_container_by_name(&name.as_str())
+                .get_container_by_name(name.as_str())
                 .with_context(|| {
                     format!(
                         "container with name `{}` does not exists in configuration",
@@ -27,7 +27,7 @@ async fn prepare_config(config: &Config, container: Option<String>) -> Result<()
         None => {
             for (name, container) in &config.containers {
                 backend
-                    .prepare(&container)
+                    .prepare(container)
                     .await
                     .with_context(|| format!("could not prepare container `{}`", name))?;
             }

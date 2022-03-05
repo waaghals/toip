@@ -3,36 +3,36 @@ aliases:
   cowsay: cowsay_quay
 containers:
   sh_musl:
-    image: 'registry://quay.io/libpod/alpine@sha256:fa93b01658e3a5a1686dc3ae55f170d8de487006fb53a28efcd12ab0710a2e5f'
+    image: 'quay.io/libpod/alpine@sha256:fa93b01658e3a5a1686dc3ae55f170d8de487006fb53a28efcd12ab0710a2e5f'
     cmd: 'sh'
     links:
       cowsay: cowsay_quay
       tuxsay: tuxsay_quay
   sh_libc:
-    image: 'registry://quay.io/libpod/ubuntu:latest'
+    image: 'quay.io/libpod/ubuntu:latest'
     cmd: 'sh'
     links:
       cowsay: cowsay_quay
       tuxsay: tuxsay_quay
 #  sh_from_docker:
-#    image: 'registry://ubuntu:latest'
+#    image: 'ubuntu:latest'
 #    cmd: [sh]
 #    links:
 #      cowsay: cowsay_quay
 #      tuxsay: tuxsay_quay
 #  cowsay_docker:
-#    image: 'registry://rancher/cowsay'
+#    image: 'rancher/cowsay'
 #    cmd: [cowsay]
 #    env:
 #      COWSAY_ANIMAL: tux
 #  cowsay_latest:
-#    image: 'registry://quay.io/paper/cowsay:latest'
+#    image: 'quay.io/paper/cowsay:latest'
 #    cmd: [cowsay]
   cowsay_quay:
-    image: 'registry://quay.io/paper/cowsay@sha256:432bef5c9fd8e2e4dbc62cd18145f9a3b7f01b8db5195c59d7ddb6cc0facd744'
+    image: 'quay.io/paper/cowsay@sha256:432bef5c9fd8e2e4dbc62cd18145f9a3b7f01b8db5195c59d7ddb6cc0facd744'
     cmd: 'cowsay'
   tuxsay_quay:
-    image: 'registry://quay.io/paper/cowsay@sha256:432bef5c9fd8e2e4dbc62cd18145f9a3b7f01b8db5195c59d7ddb6cc0facd744'
+    image: 'quay.io/paper/cowsay@sha256:432bef5c9fd8e2e4dbc62cd18145f9a3b7f01b8db5195c59d7ddb6cc0facd744'
     cmd: 'cowsay'
     env:
       COWSAY_ANIMAL: tux

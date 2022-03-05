@@ -20,7 +20,7 @@ where
     for (alias, container_name) in config.aliases.iter() {
         let mut script_path = directory.clone();
         script_path.push(&alias);
-        script::create_run(&script_path, &current_exe, &container_name).with_context(|| {
+        script::create_run(&script_path, &current_exe, container_name).with_context(|| {
             format!(
                 "could not create run script for directory `{}`",
                 directory.display()
@@ -122,7 +122,7 @@ pub fn install(ignore_missing_config: bool) -> Result<()> {
             // Do not hard code the config file name here, but derive it from the current config file
             let config_file_name = file
                 .file_name()
-                .ok_or(anyhow!("Failed to determine config file name"))?;
+                .ok_or_else(|| anyhow!("Failed to determine config file name"))?;
 
             new_config_path.push(&config_file_name);
             fs::copy(&file, &new_config_path).with_context(|| {

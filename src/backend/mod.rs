@@ -6,11 +6,12 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::{env, fmt, fs};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use const_format::formatcp;
+use sha2::{Digest, Sha256};
 
 use crate::backend::driver::Driver;
-use crate::config::{Config, ContainerConfig, ImageSource, Volume};
+use crate::config::{Config, ContainerConfig, Reference, Volume};
 use crate::dirs;
 use crate::metadata::APPLICATION_NAME;
 
@@ -68,13 +69,8 @@ impl fmt::Display for BindConsistency {
     }
 }
 
+#[derive(Default, Debug, Clone)]
 pub struct BindNonRecursive(bool);
-
-impl Default for BindNonRecursive {
-    fn default() -> Self {
-        BindNonRecursive(false)
-    }
-}
 
 impl From<BindNonRecursive> for bool {
     fn from(bind_non_recursive: BindNonRecursive) -> bool {
@@ -165,7 +161,7 @@ where
 
 impl<D> Backend<D>
 where
-    D: Driver,
+    D: Driver + std::marker::Sync,
 {
     pub fn new<N, S>(driver_name: N, socket: S, driver: D) -> Self
     where
@@ -182,79 +178,97 @@ where
         }
     }
 
-    fn image_bin_dir(&self, image_id: String) -> Result<PathBuf> {
-        // TODO has image_id as it can be quite large
-        let image_dir = dirs::image(&self.driver_name, image_id)?;
-        let mut bin_dir = image_dir.clone();
+    fn image_bin_dir(&self, config: &ContainerConfig) -> Result<PathBuf> {
+        let id = self.image_id(config)?;
+        let image_dir = dirs::image(&self.driver_name, id)?;
+        let mut bin_dir = image_dir;
         bin_dir.push("bin");
 
         Ok(bin_dir)
     }
 
-    pub async fn prepare(&self, config: &ContainerConfig) -> anyhow::Result<D::Image> {
-        let image = match config.image {
-            ImageSource::Registry(ref registry_image) => {
-                self.driver
-                    .pull(
-                        &registry_image.registry,
-                        &registry_image.repository,
-                        &registry_image.reference,
+    fn image_id(&self, config: &ContainerConfig) -> Result<String> {
+        let data = bincode::serialize(&config)?;
+        Ok(format!("{:x}", Sha256::digest(&data)))
+    }
+
+    pub async fn prepare(&self, config: &ContainerConfig) -> anyhow::Result<()> {
+        if let Some(build) = &config.build {
+            // TODO tag using image when defined
+            let file = match &build.file {
+                None => {
+                    let mut path = build.context.clone();
+                    path.push("Dockerfile");
+                    path
+                }
+                Some(file) => file.clone(),
+            };
+
+            let build_args = build
+                .build_args
+                .iter()
+                .map(|(key, value)| BuildArg {
+                    name: key.clone(),
+                    value: value.clone().into_inner(),
+                })
+                .collect();
+
+            let secrets = build
+                .secrets
+                .iter()
+                .map(|(key, value)| Secret {
+                    id: key.clone(),
+                    path: value.clone().into_inner(),
+                })
+                .collect();
+
+            let ssh = build
+                .ssh
+                .iter()
+                .map(|(key, value)| Ssh {
+                    id: key.clone(),
+                    path: value.clone().into_inner(),
+                })
+                .collect();
+
+            let reference = match &config.image {
+                None => Reference::default(),
+                Some(image) => image.reference.clone(),
+            };
+
+            let repository = match &config.image {
+                None => self.image_id(config)?,
+                Some(image) => image.repository.clone(),
+            };
+
+            self.driver
+                .build(
+                    &build.context,
+                    file,
+                    build_args,
+                    secrets,
+                    ssh,
+                    build.target.clone(),
+                    &repository,
+                    &reference,
+                )
+                .await
+                .with_context(|| {
+                    format!(
+                        "could not build image from build context `{}`",
+                        &build.context.display()
                     )
-                    .await
-            }
-            ImageSource::Build(ref build_image) => {
-                let file = match &build_image.file {
-                    None => {
-                        let mut path = build_image.context.clone();
-                        path.push("Dockerfile");
-                        path
-                    }
-                    Some(file) => file.clone(),
-                };
+                })?;
+        } else if let Some(image) = &config.image {
+            self.driver
+                .pull(image)
+                .await
+                .with_context(|| format!("could not pull image `{}`", &image))?;
+        } else {
+            bail!("missing image or build config");
+        };
 
-                let build_args = build_image
-                    .build_args
-                    .iter()
-                    .map(|(key, value)| BuildArg {
-                        name: key.clone(),
-                        value: value.clone().into_inner(),
-                    })
-                    .collect();
-
-                let secrets = build_image
-                    .secrets
-                    .iter()
-                    .map(|(key, value)| Secret {
-                        id: key.clone(),
-                        path: value.clone().into_inner(),
-                    })
-                    .collect();
-
-                let ssh = build_image
-                    .ssh
-                    .iter()
-                    .map(|(key, value)| Ssh {
-                        id: key.clone(),
-                        path: value.clone().into_inner(),
-                    })
-                    .collect();
-
-                self.driver
-                    .build(
-                        &build_image.context,
-                        file,
-                        build_args,
-                        secrets,
-                        ssh,
-                        build_image.target.clone(),
-                    )
-                    .await
-            }
-        }
-        .context("could not prepare image")?;
-
-        let image_id = image.id();
-        let bin_dir = self.image_bin_dir(image_id)?;
+        let bin_dir = self.image_bin_dir(&config)?;
 
         // TODO if image_dir exists, skip creation of scripts
         dirs::create(&bin_dir)
@@ -276,7 +290,7 @@ where
                 .context("could not create call script")?;
         }
 
-        Ok(image)
+        Ok(())
     }
 
     fn create_mounts<P>(
@@ -364,7 +378,7 @@ where
         Ok(mounts)
     }
 
-    fn create_env_vars(&self, path: &String, config: &ContainerConfig) -> Vec<EnvVar> {
+    fn create_env_vars(&self, path: String, config: &ContainerConfig) -> Vec<EnvVar> {
         let mut envs = vec![];
         for (name, value) in &config.env {
             envs.push(EnvVar {
@@ -380,7 +394,7 @@ where
 
         envs.push(EnvVar {
             name: "path".to_string(),
-            value: path.clone(),
+            value: path,
         });
 
         envs
@@ -388,7 +402,6 @@ where
 
     pub async fn spawn(
         &self,
-        image: D::Image,
         config: &Config,
         container_config: &ContainerConfig,
         config_dir: &Path,
@@ -397,15 +410,14 @@ where
         stdout: Stdio,
         stderr: Stdio,
     ) -> anyhow::Result<()> {
-        let image_id = image.id();
-        let image_bin_dir = self.image_bin_dir(image_id)?;
+        let image_bin_dir = self.image_bin_dir(container_config)?;
 
         let mut volumes = HashMap::new();
         for (destination, volume_name) in &container_config.volumes {
             let volume = config
                 .volumes
                 .get(volume_name.as_str())
-                .ok_or(anyhow!("missing volume `{}` in config", volume_name))?;
+                .ok_or_else(|| anyhow!("missing volume `{}` in config", volume_name))?;
             volumes.insert(destination.clone(), volume.clone());
         }
 
@@ -413,16 +425,26 @@ where
             .create_mounts(image_bin_dir, volumes, config_dir)
             .context("could not configure mounts")?;
 
+        let reference = match &container_config.image {
+            None => Reference::default(),
+            Some(image) => image.reference.clone(),
+        };
+
+        let repository = match &container_config.image {
+            None => self.image_id(container_config)?,
+            Some(image) => image.repository.clone(),
+        };
+
         let path = self
             .driver
-            .path(&image)
+            .path(&repository, &reference)
             .await
             .context("could not determine PATH")?
             .map_or(CONTAINER_BINARY.into(), |some| {
                 format!("{}:{}", CONTAINER_BIN_DIR, &some)
             });
 
-        let env_vars = self.create_env_vars(&path, &container_config);
+        let env_vars = self.create_env_vars(path, container_config);
 
         let cmd = container_config.cmd.clone();
         let mut all_args = container_config.args.clone();
@@ -430,9 +452,15 @@ where
         let entrypoint = container_config.entrypoint.clone();
         let workdir = container_config.workdir.clone();
 
+        log::info!(
+            "Running container from image `{}/{}`",
+            repository,
+            reference
+        );
         self.driver
             .run(
-                image,
+                &repository,
+                &reference,
                 mounts,
                 entrypoint,
                 cmd,
