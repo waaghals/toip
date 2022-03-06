@@ -31,6 +31,7 @@ itertools = "0.10.3"
 which = "4.2.4"
 subst = "0.1.0"
 dotenv = "0.15.0"
+uds = "0.2.6"
 
 [profile.release]
 codegen-units = 1
