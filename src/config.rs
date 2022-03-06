@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 use std::convert::{Infallible, TryFrom, TryInto};
+use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::marker::PhantomData;
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::{fmt, str};
@@ -12,6 +14,7 @@ use regex::Regex;
 use serde::de::{Error, MapAccess, Unexpected, Visitor};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use serde_derive::{Deserialize as DeriveDeserialize, Serialize as DeriveSerialize};
+use sha2::{Digest as Sha2Digest, Sha256};
 
 const CONFIG_FILE_NAME: &str = "toip.yaml";
 
@@ -563,4 +566,12 @@ where
     }
 
     deserializer.deserialize_any(RegistrySourceVisitor)
+}
+
+pub fn hash<D>(dir: D) -> Result<String>
+where
+    D: AsRef<OsStr>,
+{
+    let data = dir.as_ref().as_bytes();
+    Ok(format!("{:x}", Sha256::digest(data)))
 }

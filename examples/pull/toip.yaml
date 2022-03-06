@@ -1,6 +1,12 @@
 aliases:
-  pull: pull
+  simple: simple
+  full: full
 containers:
-  pull:
+  simple:
     image: alpine:3
+    cmd: sh
+  full:
+    image:
+      repository: alpine
+      reference: 3
     cmd: sh

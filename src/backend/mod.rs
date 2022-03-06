@@ -2,6 +2,7 @@ pub mod driver;
 pub mod script;
 
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::{env, fmt, fs};
@@ -12,8 +13,8 @@ use sha2::{Digest, Sha256};
 
 use crate::backend::driver::Driver;
 use crate::config::{Config, ContainerConfig, Reference, Volume};
-use crate::dirs;
 use crate::metadata::APPLICATION_NAME;
+use crate::{config, dirs};
 
 const CONTAINER_BIN_DIR: &str = formatcp!("/usr/bin/{}", APPLICATION_NAME);
 const CONTAINER_BINARY: &str = formatcp!("{}/{}", CONTAINER_BIN_DIR, APPLICATION_NAME);
@@ -178,21 +179,34 @@ where
         }
     }
 
-    fn image_bin_dir(&self, config: &ContainerConfig) -> Result<PathBuf> {
-        let id = self.image_id(config)?;
-        let image_dir = dirs::image(&self.driver_name, id)?;
+    fn image_bin_dir<C>(&self, config_dir: C) -> Result<PathBuf>
+    where
+        C: AsRef<OsStr>,
+    {
+        let image_dir = dirs::image(&self.driver_name, config_dir)?;
         let mut bin_dir = image_dir;
         bin_dir.push("bin");
 
         Ok(bin_dir)
     }
 
-    fn image_id(&self, config: &ContainerConfig) -> Result<String> {
-        let data = bincode::serialize(&config)?;
-        Ok(format!("{:x}", Sha256::digest(&data)))
+    fn image_id<P>(&self, config_dir: P, container_name: &str) -> Result<String>
+    where
+        P: AsRef<OsStr>,
+    {
+        let digest = config::hash(config_dir)?;
+        Ok(format!("{}-{}", digest, container_name))
     }
 
-    pub async fn prepare(&self, config: &ContainerConfig) -> anyhow::Result<()> {
+    pub async fn prepare<P>(
+        &self,
+        container_name: &str,
+        config: &ContainerConfig,
+        config_dir: P,
+    ) -> anyhow::Result<()>
+    where
+        P: AsRef<OsStr>,
+    {
         if let Some(build) = &config.build {
             // TODO tag using image when defined
             let file = match &build.file {
@@ -237,7 +251,7 @@ where
             };
 
             let repository = match &config.image {
-                None => self.image_id(config)?,
+                None => self.image_id(&config_dir, container_name)?,
                 Some(image) => image.repository.clone(),
             };
 
@@ -268,7 +282,7 @@ where
             bail!("missing image or build config");
         };
 
-        let bin_dir = self.image_bin_dir(&config)?;
+        let bin_dir = self.image_bin_dir(&config_dir)?;
 
         // TODO if image_dir exists, skip creation of scripts
         dirs::create(&bin_dir)
@@ -403,6 +417,7 @@ where
     pub async fn spawn(
         &self,
         config: &Config,
+        container_name: &str,
         container_config: &ContainerConfig,
         config_dir: &Path,
         args: Vec<String>,
@@ -410,7 +425,7 @@ where
         stdout: Stdio,
         stderr: Stdio,
     ) -> anyhow::Result<()> {
-        let image_bin_dir = self.image_bin_dir(container_config)?;
+        let image_bin_dir = self.image_bin_dir(&config_dir)?;
 
         let mut volumes = HashMap::new();
         for (destination, volume_name) in &container_config.volumes {
@@ -431,7 +446,7 @@ where
         };
 
         let repository = match &container_config.image {
-            None => self.image_id(container_config)?,
+            None => self.image_id(config_dir, container_name)?,
             Some(image) => image.repository.clone(),
         };
 

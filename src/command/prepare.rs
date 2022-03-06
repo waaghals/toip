@@ -1,5 +1,6 @@
 use std::env;
 use std::fs::File;
+use std::path::Path;
 
 use anyhow::{bail, Context, Result};
 
@@ -7,7 +8,11 @@ use crate::backend::driver::DockerCliCompatible;
 use crate::backend::Backend;
 use crate::config::{find_config_file, Config};
 
-async fn prepare_config(config: &Config, container: Option<String>) -> Result<()> {
+async fn prepare_config(
+    config: &Config,
+    container: Option<String>,
+    config_path: &Path,
+) -> Result<()> {
     let backend = Backend::<DockerCliCompatible>::default();
     match container {
         Some(name) => {
@@ -20,14 +25,14 @@ async fn prepare_config(config: &Config, container: Option<String>) -> Result<()
                     )
                 })?;
             backend
-                .prepare(&container)
+                .prepare(&name, &container, config_path)
                 .await
                 .with_context(|| format!("could not prepare container `{}`", name))?;
         }
         None => {
             for (name, container) in &config.containers {
                 backend
-                    .prepare(container)
+                    .prepare(name, container, config_path)
                     .await
                     .with_context(|| format!("could not prepare container `{}`", name))?;
             }
@@ -61,7 +66,7 @@ pub async fn prepare(ignore_missing_config: bool, container: Option<String>) -> 
                 format!("could not create config from file `{}`", file.display())
             })?;
 
-            prepare_config(&config, container).await
+            prepare_config(&config, container, file.parent().unwrap()).await
         }
     }
 }
