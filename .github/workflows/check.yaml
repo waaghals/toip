@@ -16,6 +16,7 @@ jobs:
           components: clippy
           override: true
       - uses: actions-rs/clippy-check@v1
+        continue-on-error: true
         name: Run Clippy
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
