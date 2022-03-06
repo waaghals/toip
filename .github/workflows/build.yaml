@@ -1,6 +1,6 @@
 on: [push]
 
-name: Cargo build
+name: Build
 
 jobs:
   build:
@@ -10,16 +10,21 @@ jobs:
         include:
           - target: "i686-unknown-linux-musl"
             os: "ubuntu-latest"
+            name: "Linux 32-bit"
           - target: "x86_64-unknown-linux-musl"
             os: "ubuntu-latest"
+            name: "Linux 64-bit"
           - target: "aarch64-unknown-linux-musl"
             os: "ubuntu-latest"
+            name: "Linux ARM64"
 #
           - target: "x86_64-apple-darwin"
             os: "macos-latest"
+            name: "macOS 64-bit"
           - target: "aarch64-apple-darwin"
             os: "macos-latest"
-    name: ${{ matrix.target }}
+            name: "macOS ARM64"
+    name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
@@ -41,5 +46,5 @@ jobs:
       - uses: actions/upload-artifact@v3
         name: Upload
         with:
-          name: ${{ matrix.target }}
+          name: ${{ matrix.name }}
           path: target/${{ matrix.target }}/release/toip
