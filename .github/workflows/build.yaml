@@ -30,14 +30,23 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
+        name: Checkout
       - uses: actions-rs/toolchain@v1
+        name: Configure toolchain
         with:
           toolchain: nightly
           target: ${{ matrix.target }}
           override: true
       - uses: Swatinem/rust-cache@v1
+        name: Configure caching
       - uses: actions-rs/cargo@v1
+        name: Build
         with:
           use-cross: true
           command: build
           args: --target ${{ matrix.target }} --release
+      - uses: actions/upload-artifact@v3
+        name: Upload
+        with:
+          name: ${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/toip
