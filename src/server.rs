@@ -1,6 +1,5 @@
 use std::collections::HashMap;
-use std::io::IoSliceMut;
-use std::os::unix::net::{UnixDatagram, UnixStream};
+use std::os::unix::net::UnixStream;
 use std::os::unix::prelude::RawFd;
 use std::path::Path;
 use std::str;
@@ -14,7 +13,7 @@ use tokio::net::UnixListener;
 use tokio::sync::mpsc::Sender;
 use tokio_stream::wrappers::UnixListenerStream;
 use tokio_util::sync::CancellationToken;
-use uds::{UnixDatagramExt, UnixStreamExt};
+use uds::UnixStreamExt;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Call {

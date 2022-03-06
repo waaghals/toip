@@ -13,7 +13,6 @@ use crate::config::{Reference, RegistrySource};
 pub struct DockerCliCompatible {
     binary: PathBuf,
     argument: Option<PathBuf>,
-    socket: Option<PathBuf>,
 }
 
 pub struct DockerImage(String);
@@ -42,17 +41,14 @@ impl DockerCliCompatible {
             "colima" => DockerCliCompatible {
                 binary: binary.unwrap(),
                 argument: Some("nerdctl".into()),
-                socket: None,
             },
             "lima" => DockerCliCompatible {
                 binary: binary.unwrap(),
                 argument: Some("nerdctl".into()),
-                socket: None,
             },
             _ => DockerCliCompatible {
                 binary: binary.unwrap(),
                 argument: None,
-                socket: None,
             },
         })
     }

@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::io::IoSlice;
 use std::os::unix::net::UnixStream;
 use std::path::Path;
 

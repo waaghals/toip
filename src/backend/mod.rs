@@ -26,6 +26,7 @@ fn container_socket() -> String {
     format!("/run/{}/sock", APPLICATION_NAME)
 }
 
+#[allow(dead_code)]
 pub enum BindPropagation {
     Shared,
     Slave,
@@ -54,6 +55,7 @@ impl fmt::Display for BindPropagation {
     }
 }
 
+#[allow(dead_code)]
 pub enum BindConsistency {
     Consistent,
     Cached,
@@ -97,6 +99,7 @@ pub struct Mount {
     propagation: BindPropagation,
     non_recursive: BindNonRecursive,
     target: PathBuf,
+    #[allow(dead_code)]
     readonly: bool,
 }
 
@@ -396,7 +399,7 @@ where
 
         envs.push(EnvVar {
             name: "TOIP_SOCK".to_string(),
-            value: container_socket().to_string(),
+            value: container_socket(),
         });
 
         envs.push(EnvVar {
@@ -407,6 +410,7 @@ where
         envs
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn spawn(
         &self,
         config: &Config,
@@ -448,7 +452,7 @@ where
             .path(&repository, &reference)
             .await
             .context("could not determine PATH")?
-            .map_or(container_binary().into(), |some| {
+            .map_or(container_binary(), |some| {
                 format!("{}:{}", container_bin_dir(), &some)
             });
 

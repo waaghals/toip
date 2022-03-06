@@ -18,6 +18,7 @@ pub trait Driver {
 
     async fn pull(&self, image: &RegistrySource) -> Result<()>;
 
+    #[allow(clippy::too_many_arguments)]
     async fn build<C, F>(
         &self,
         context: C,
@@ -33,6 +34,7 @@ pub trait Driver {
         C: AsRef<Path> + Send,
         F: AsRef<Path> + Send;
 
+    #[allow(clippy::too_many_arguments)]
     async fn run(
         &self,
         repository: &str,

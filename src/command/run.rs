@@ -115,7 +115,7 @@ where
                 backend
                     .spawn(
                         &config,
-                        &name,
+                        name,
                         &container_config,
                         &config_dir,
                         instruction.info.arguments,
