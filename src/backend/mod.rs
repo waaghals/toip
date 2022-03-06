@@ -8,17 +8,25 @@ use std::process::Stdio;
 use std::{env, fmt, fs};
 
 use anyhow::{anyhow, bail, Context, Result};
-use const_format::formatcp;
 
 use crate::backend::driver::Driver;
 use crate::config::{Config, ContainerConfig, Reference, Volume};
 use crate::metadata::APPLICATION_NAME;
 use crate::{config, dirs};
 
-const CONTAINER_BIN_DIR: &str = formatcp!("/usr/bin/{}", APPLICATION_NAME);
-const CONTAINER_BINARY: &str = formatcp!("{}/{}", CONTAINER_BIN_DIR, APPLICATION_NAME);
-const CONTAINER_SOCKET: &str = formatcp!("/run/{}/sock", APPLICATION_NAME);
+fn container_bin_dir() -> String {
+    format!("/usr/bin/{}", APPLICATION_NAME)
+}
 
+fn container_binary() -> String {
+    format!("{}/{}", container_bin_dir(), APPLICATION_NAME)
+}
+
+fn container_socket() -> String {
+    format!("/run/{}/sock", APPLICATION_NAME)
+}
+
+#[allow(dead_code)]
 pub enum BindPropagation {
     Shared,
     Slave,
@@ -47,6 +55,7 @@ impl fmt::Display for BindPropagation {
     }
 }
 
+#[allow(dead_code)]
 pub enum BindConsistency {
     Consistent,
     Cached,
@@ -90,6 +99,7 @@ pub struct Mount {
     propagation: BindPropagation,
     non_recursive: BindNonRecursive,
     target: PathBuf,
+    #[allow(dead_code)]
     readonly: bool,
 }
 
@@ -286,7 +296,7 @@ where
                 target,
                 script_path.to_str().unwrap()
             );
-            script::create_call(&script_path, CONTAINER_BINARY, target.as_str())
+            script::create_call(&script_path, container_binary(), target.as_str())
                 .context("could not create call script")?;
         }
 
@@ -308,7 +318,7 @@ where
                 consistency: Default::default(),
                 propagation: Default::default(),
                 non_recursive: Default::default(),
-                target: CONTAINER_BIN_DIR.into(),
+                target: container_bin_dir().into(),
                 readonly: true,
             },
             Mount {
@@ -316,7 +326,7 @@ where
                 consistency: Default::default(),
                 propagation: Default::default(),
                 non_recursive: Default::default(),
-                target: CONTAINER_BINARY.into(),
+                target: container_binary().into(),
                 readonly: true,
             },
             Mount {
@@ -324,7 +334,7 @@ where
                 consistency: Default::default(),
                 propagation: Default::default(),
                 non_recursive: Default::default(),
-                target: CONTAINER_SOCKET.into(),
+                target: container_socket().into(),
                 readonly: true,
             },
         ];
@@ -389,7 +399,7 @@ where
 
         envs.push(EnvVar {
             name: "TOIP_SOCK".to_string(),
-            value: CONTAINER_SOCKET.to_string(),
+            value: container_socket(),
         });
 
         envs.push(EnvVar {
@@ -400,6 +410,7 @@ where
         envs
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn spawn(
         &self,
         config: &Config,
@@ -441,8 +452,8 @@ where
             .path(&repository, &reference)
             .await
             .context("could not determine PATH")?
-            .map_or(CONTAINER_BINARY.into(), |some| {
-                format!("{}:{}", CONTAINER_BIN_DIR, &some)
+            .map_or(container_binary(), |some| {
+                format!("{}:{}", container_bin_dir(), &some)
             });
 
         let env_vars = self.create_env_vars(path, container_config);

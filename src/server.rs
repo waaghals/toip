@@ -1,6 +1,5 @@
 use std::collections::HashMap;
-use std::io::IoSliceMut;
-use std::os::unix::net::{AncillaryData, SocketAncillary, UnixStream};
+use std::os::unix::net::UnixStream;
 use std::os::unix::prelude::RawFd;
 use std::path::Path;
 use std::str;
@@ -14,11 +13,12 @@ use tokio::net::UnixListener;
 use tokio::sync::mpsc::Sender;
 use tokio_stream::wrappers::UnixListenerStream;
 use tokio_util::sync::CancellationToken;
+use uds::UnixStreamExt;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Call {
     pub info: CallInfo,
-    pub file_descriptors: Vec<RawFd>,
+    pub file_descriptors: [RawFd; 3],
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -39,27 +39,17 @@ impl Inner {
         // TODO implement bidirectional communication.
         // Host should communicate the inherited envvars so the client only send
         // the env vars needed, limiting the exposure of envvars
-        let mut buf1 = [0; 4];
-        let mut buf2 = [0; 1024];
-        let bufs = &mut [IoSliceMut::new(&mut buf1), IoSliceMut::new(&mut buf2)][..];
-        let mut ancillary_buffer = [0; 128];
-        let mut ancillary = SocketAncillary::new(&mut ancillary_buffer[..]);
-        let _size = stream.recv_vectored_with_ancillary(bufs, &mut ancillary)?;
-        let message_size = u32::from_be_bytes([buf1[0], buf1[1], buf1[2], buf1[3]]) as usize;
+
+        let mut data = [0; 1024];
+        let mut file_descriptors = [0; 3];
+        stream.recv_fds(&mut data, &mut file_descriptors)?;
+
+        let message_size = u32::from_be_bytes([data[0], data[1], data[2], data[3]]) as usize;
         if message_size >= 1024 {
             panic!("Message size to large for single buffer"); // TODO allow arbitrary buffer size
         }
 
-        let info: CallInfo = serde_json::from_slice(&buf2[0..message_size])?;
-
-        let mut file_descriptors = vec![];
-        for ancillary_result in ancillary.messages() {
-            if let AncillaryData::ScmRights(scm_rights) = ancillary_result.unwrap() {
-                for fd in scm_rights {
-                    file_descriptors.push(fd);
-                }
-            }
-        }
+        let info: CallInfo = serde_json::from_slice(&data[4..message_size])?;
         log::info!(
             "received call for `{}`, with file descriptors `{}`",
             info.name,

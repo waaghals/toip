@@ -1,10 +1,10 @@
 use std::collections::HashMap;
-use std::io::IoSlice;
-use std::os::unix::net::{SocketAncillary, UnixStream};
+use std::os::unix::net::UnixStream;
 use std::path::Path;
 
 use anyhow::{Context, Result};
 use itertools::join;
+use uds::UnixStreamExt;
 
 use crate::CallInfo;
 
@@ -21,35 +21,32 @@ where
     };
 
     let socket_path = socket_path.as_ref();
-
-    let json =
-        serde_json::to_string(&call_info).context("could not serialize call info to json")?;
-    let data = json.as_bytes();
-    let size = data.len() as u32;
-
     let socket = UnixStream::connect(&socket_path)
         .with_context(|| format!("could not connect to socket `{}`", socket_path.display()))?;
 
-    let buf1 = size.to_be_bytes();
-    let bufs = &[IoSlice::new(&buf1), IoSlice::new(data)][..];
+    let json =
+        serde_json::to_string(&call_info).context("could not serialize call info to json")?;
+    let payload = json.as_bytes();
+
+    let size = payload.len() as u32;
+    let payload_length = size.to_be_bytes();
     let fds = [0, 1, 2];
-    let mut ancillary_buffer = [0; 128];
-    let mut ancillary = SocketAncillary::new(&mut ancillary_buffer[..]);
-    ancillary.add_fds(&fds[..]);
     log::debug!(
         "sending ancillary information over socket `{:#?}` with file descriptors `{}`",
         &socket_path,
         join(fds, ", ")
     );
-    socket
-        .send_vectored_with_ancillary(bufs, &mut ancillary)
-        .with_context(|| {
-            format!(
-                "could not send ancillary data to socket `{}`",
-                socket_path.display()
-            )
-        })?;
 
+    let mut data = Vec::new();
+    data.extend(payload_length);
+    data.extend(payload);
+
+    socket.send_fds(&data, &fds).with_context(|| {
+        format!(
+            "could not send ancillary data to socket `{}`",
+            socket_path.display()
+        )
+    })?;
     // TODO should wait for result here
 
     Ok(())

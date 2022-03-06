@@ -1,11 +1,9 @@
 use std::ffi::OsStr;
 use std::fs;
-use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use directories::{BaseDirs, ProjectDirs};
-use sha2::{Digest, Sha256};
 
 use crate::config;
 use crate::metadata::{APPLICATION_NAME, ORGANIZATION, QUALIFIER};
@@ -72,29 +70,6 @@ where
     }
 }
 
-fn layers_dir() -> Result<PathBuf> {
-    cache_dir("layers")
-}
-
-pub fn layer_dir<A, H>(algorithm: A, hash: H) -> Result<PathBuf>
-where
-    A: AsRef<Path>,
-    H: AsRef<Path>,
-{
-    let mut dir = layers_dir()?;
-    dir.push(algorithm);
-    dir.push(hash);
-
-    Ok(dir)
-}
-
-pub fn blobs_dir() -> Result<PathBuf> {
-    cache_dir("blobs")
-}
-fn containers() -> Result<PathBuf> {
-    state_dir("containers")
-}
-
 fn images() -> Result<PathBuf> {
     state_dir("images")
 }
@@ -140,15 +115,6 @@ where
     let mut dir: PathBuf = images()?;
     dir.push(driver);
     dir.push(digest);
-    Ok(dir)
-}
-
-pub fn container<C>(container_id: C) -> Result<PathBuf>
-where
-    C: AsRef<Path>,
-{
-    let mut dir: PathBuf = containers()?;
-    dir.push(container_id);
     Ok(dir)
 }
 

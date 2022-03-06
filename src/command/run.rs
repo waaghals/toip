@@ -112,14 +112,10 @@ where
                 let stdout = Stdio::from_raw_fd(instruction.file_descriptors[1]);
                 let stderr = Stdio::from_raw_fd(instruction.file_descriptors[2]);
 
-                // Drop file_descriptors from above so they cannot be used elsewhere
-                drop(instruction.file_descriptors);
-
-                println!("{:#?}", instruction.info.arguments);
                 backend
                     .spawn(
                         &config,
-                        &name,
+                        name,
                         &container_config,
                         &config_dir,
                         instruction.info.arguments,
