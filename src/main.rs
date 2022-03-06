@@ -22,7 +22,6 @@ mod dirs;
 mod dotenv;
 mod logger;
 mod metadata;
-mod progress_bar;
 mod server;
 
 #[tokio::main()]
