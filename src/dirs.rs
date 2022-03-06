@@ -1,10 +1,13 @@
+use std::ffi::OsStr;
 use std::fs;
+use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
 use directories::{BaseDirs, ProjectDirs};
 use sha2::{Digest, Sha256};
 
+use crate::config;
 use crate::metadata::{APPLICATION_NAME, ORGANIZATION, QUALIFIER};
 
 fn project_directories() -> Result<ProjectDirs> {
@@ -107,18 +110,12 @@ fn volumes_dir() -> Result<PathBuf> {
 pub fn volume<V, S>(volume: V, seed: Option<S>) -> Result<PathBuf>
 where
     V: AsRef<Path>,
-    S: AsRef<Path>,
+    S: AsRef<OsStr>,
 {
     let mut dir = volumes_dir()?;
     if let Some(seed) = seed {
-        let data = seed
-            .as_ref()
-            .to_str()
-            .ok_or(anyhow!(
-                "cannot convert directory to string to generate volume seed"
-            ))?
-            .as_ref();
-        dir.push(format!("{:x}", Sha256::digest(data)));
+        let digest = config::hash(seed)?;
+        dir.push(digest);
     }
     dir.push(volume);
     Ok(dir)
@@ -126,30 +123,23 @@ where
 
 pub fn script<D>(dir: D) -> Result<PathBuf>
 where
-    D: AsRef<Path>,
+    D: AsRef<OsStr>,
 {
-    let data = dir
-        .as_ref()
-        .to_str()
-        .ok_or(anyhow!(
-            "cannot convert directory to string to generate script directory hash"
-        ))?
-        .as_ref();
-    let digest = format!("{:x}", Sha256::digest(data));
-
+    let digest = config::hash(dir)?;
     let mut dir: PathBuf = scripts()?;
     dir.push(digest);
     Ok(dir)
 }
 
-pub fn image<D, I>(driver: D, image_id: I) -> Result<PathBuf>
+pub fn image<D, I>(driver: D, config_dir: I) -> Result<PathBuf>
 where
     D: AsRef<Path>,
-    I: AsRef<Path>,
+    I: AsRef<OsStr>,
 {
+    let digest = config::hash(config_dir)?;
     let mut dir: PathBuf = images()?;
     dir.push(driver);
-    dir.push(image_id);
+    dir.push(digest);
     Ok(dir)
 }
 

@@ -4,7 +4,7 @@ use anyhow::Result;
 use dotenv::Error;
 
 pub fn load() -> Result<()> {
-    for file in vec![".env.local", ".env"] {
+    for file in &[".env.local", ".env"] {
         // Ignore not found errors
         let result = match dotenv::from_filename(file) {
             Ok(_) => Ok(()),

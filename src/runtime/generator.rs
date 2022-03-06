@@ -28,6 +28,7 @@ const CONTAINER_BIN_DIR: &str = formatcp!("/usr/bin/{}", APPLICATION_NAME);
 const CONTAINER_BINARY: &str = formatcp!("{}/{}", CONTAINER_BIN_DIR, APPLICATION_NAME);
 const CONTAINER_SOCKET: &str = formatcp!("/run/{}/sock", APPLICATION_NAME);
 
+#[deprecated]
 #[async_trait]
 pub trait RuntimeBundleGenerator {
     async fn build<C, A, S>(
@@ -43,6 +44,7 @@ pub trait RuntimeBundleGenerator {
         S: Into<PathBuf> + Send;
 }
 
+#[deprecated]
 #[derive(Debug, Clone, Default)]
 pub struct RunGenerator {}
 
@@ -448,6 +450,7 @@ impl RuntimeBundleGenerator for RunGenerator {
     }
 }
 
+#[deprecated]
 pub struct CallGenerator {}
 
 impl Default for CallGenerator {

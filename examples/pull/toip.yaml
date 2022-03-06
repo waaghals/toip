@@ -1,0 +1,12 @@
+aliases:
+  simple: simple
+  full: full
+containers:
+  simple:
+    image: alpine:3
+    cmd: sh
+  full:
+    image:
+      repository: alpine
+      reference: 3
+    cmd: sh

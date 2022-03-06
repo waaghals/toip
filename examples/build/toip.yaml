@@ -1,0 +1,8 @@
+aliases:
+  build: build
+containers:
+  build:
+    # Build artifact will be tagged with the following
+    image: build:tag
+    build: .
+    cmd: sh

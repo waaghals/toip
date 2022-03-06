@@ -1,1 +1,2 @@
+#[deprecated]
 pub mod manager;

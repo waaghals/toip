@@ -2,8 +2,7 @@ aliases:
   build_args: build_args
 containers:
   build_args:
-    image:
-      type: build
+    build:
       context: .
       build_args:
         ALPINE_VERSION: "3" # TODO handle integer values

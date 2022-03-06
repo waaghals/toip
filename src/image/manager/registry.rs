@@ -13,10 +13,12 @@ use crate::oci::distribution::{OciRegistry, Registry};
 use crate::oci::image::{Digest, Image};
 use crate::progress_bar::bytes_style;
 
+#[deprecated]
 pub struct RegistryManager {
     client: OciRegistry,
 }
 
+#[deprecated]
 fn destination(digest: &Digest) -> Result<PathBuf> {
     dirs::layer_dir(&digest.algorithm.to_string(), &digest.encoded)
 }

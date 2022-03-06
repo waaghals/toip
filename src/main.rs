@@ -1,4 +1,3 @@
-#![feature(async_stream)]
 #![feature(unix_socket_ancillary_data)]
 #![feature(const_mut_refs)]
 #![feature(ready_macro)]
@@ -14,8 +13,6 @@ use server::CallInfo;
 use crate::cli::{Arguments, Cli, Command};
 use crate::command::{call, inject, install, prepare, run};
 use crate::config::{find_config_file, Config};
-use crate::oci::runtime::OciCliRuntime;
-use crate::runtime::generator::{RunGenerator, RuntimeBundleGenerator};
 
 mod backend;
 mod cli;
@@ -23,12 +20,9 @@ mod command;
 mod config;
 mod dirs;
 mod dotenv;
-mod image;
 mod logger;
 mod metadata;
-mod oci;
 mod progress_bar;
-mod runtime;
 mod server;
 
 #[tokio::main()]
@@ -67,8 +61,8 @@ async fn main() -> Result<()> {
         Command::Inject { shell } => inject(shell),
         Command::Debug {} => {
             let current_dir = env::current_dir()?;
-            let config_path =
-                find_config_file(current_dir).ok_or(anyhow!("Unable to find config file"))?;
+            let config_path = find_config_file(current_dir)
+                .ok_or_else(|| anyhow!("Unable to find config file"))?;
             let config_dir = config_path.parent().unwrap().to_path_buf();
             let config = Config::new_from_dir(&config_dir)?;
             dbg!(config);

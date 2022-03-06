@@ -6,7 +6,6 @@ use std::{env, fs};
 use anyhow::{anyhow, Context, Result};
 use futures_util::stream::FuturesUnordered;
 use itertools::join;
-use sha2::Digest;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::StreamExt;
@@ -16,7 +15,7 @@ use crate::backend::driver::DockerCliCompatible;
 use crate::backend::{script, Backend};
 use crate::command::call::call;
 use crate::config::{find_config_file, Config};
-use crate::{dirs, server, OciCliRuntime, RunGenerator};
+use crate::{dirs, server};
 
 pub async fn run<P>(script_path: P, args: Vec<String>) -> Result<()>
 where
@@ -35,11 +34,10 @@ where
 
     // TODO decide how to load config
     let current_dir = env::current_dir()?;
-    let config_path = find_config_file(current_dir).ok_or(anyhow!("Unable to find config file"))?;
+    let config_path =
+        find_config_file(current_dir).ok_or_else(|| anyhow!("Unable to find config file"))?;
     let config_dir = config_path.parent().unwrap().to_path_buf();
     let config = Config::new_from_dir(&config_dir)?;
-    let runtime = OciCliRuntime::default();
-    let runtime_generator = RunGenerator::default();
 
     let (tx, rx) = mpsc::channel(100);
 
@@ -90,8 +88,6 @@ where
     while let Some(instruction) = call_instruction_stream.next().await {
         let call_container_name = instruction.info.name.clone();
 
-        let _runtime_generator = runtime_generator.clone();
-        let _runtime = runtime.clone();
         let config = config.clone();
         log::trace!(
             "received file descriptors `{}`",
@@ -109,7 +105,6 @@ where
             let container_config =
                 container_option.with_context(|| format!("No container name `{}`", name))?;
 
-            let image = backend.prepare(&container_config).await?;
             // Ensure the the new Stdio instance are the sole owners of the file descriptors.
             // i.e. no other code must consume the instructions.file_descriptors
             unsafe {
@@ -123,8 +118,8 @@ where
                 println!("{:#?}", instruction.info.arguments);
                 backend
                     .spawn(
-                        image,
                         &config,
+                        &name,
                         &container_config,
                         &config_dir,
                         instruction.info.arguments,
