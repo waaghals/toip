@@ -27,7 +27,7 @@ jobs:
           - target: "aarch64-apple-darwin"
             os: "macos-latest"
     name: ${{ matrix.target }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
