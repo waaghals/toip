@@ -26,7 +26,6 @@ clap = {version = "3.1.2", features = ["derive"]}
 tokio = {version = "1.8.1", features = ["rt", "rt-multi-thread", "net", "io-util", "macros", "process"]}
 tokio-stream = {version = "0.1.7", features = ["net", "io-util"]}
 tokio-util = {version = "0.6.7", features = ["codec"]}
-const_format = { version="0.2.22", features = ["fmt"] }
 itertools = "0.10.3"
 which = "4.2.4"
 subst = "0.1.0"
