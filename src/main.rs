@@ -1,6 +1,4 @@
 #![feature(unix_socket_ancillary_data)]
-#![feature(const_mut_refs)]
-#![feature(ready_macro)]
 
 use std::env;
 use std::process::{self};
