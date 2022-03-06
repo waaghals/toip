@@ -33,7 +33,7 @@ dotenv = "0.15.0"
 uds = "0.2.6"
 
 [profile.release]
+strip = true
 codegen-units = 1
 lto = true
 opt-level = 'z'
-strip = true
