@@ -36,3 +36,4 @@ dotenv = "0.15.0"
 codegen-units = 1
 lto = true
 opt-level = 'z'
+strip = true
