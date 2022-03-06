@@ -9,7 +9,6 @@ use std::{env, fmt, fs};
 
 use anyhow::{anyhow, bail, Context, Result};
 use const_format::formatcp;
-use sha2::{Digest, Sha256};
 
 use crate::backend::driver::Driver;
 use crate::config::{Config, ContainerConfig, Reference, Volume};
@@ -83,19 +82,6 @@ impl BindNonRecursive {
     fn is_non_recursive(&self) -> bool {
         self.0
     }
-}
-
-enum MountType {
-    // Volume {
-    //     source: Option<String>,
-    // },
-    Bind {
-        source: PathBuf,
-        consistency: BindConsistency,
-        bind_propagation: BindPropagation,
-        bind_nonrecursive: BindNonRecursive,
-    },
-    // Tmpfs,
 }
 
 pub struct Mount {
