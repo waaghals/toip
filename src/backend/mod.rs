@@ -3,14 +3,16 @@ pub mod script;
 
 use std::collections::HashMap;
 use std::ffi::OsStr;
+use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::{env, fmt, fs};
 
 use anyhow::{anyhow, bail, Context, Result};
+use rand::{thread_rng, Rng};
 
 use crate::backend::driver::Driver;
-use crate::config::{Config, ContainerConfig, Reference, Volume};
+use crate::config::{Config, ContainerConfig, HostPort, Port, Reference, Volume};
 use crate::metadata::APPLICATION_NAME;
 use crate::{config, dirs};
 
@@ -410,6 +412,31 @@ where
         envs
     }
 
+    fn is_available(&self, port: u16) -> bool {
+        TcpListener::bind(("127.0.0.1", port)).is_ok()
+    }
+
+    fn create_ports(&self, ports: &[Port]) -> HashMap<u16, u16> {
+        let mut generated_ports = vec![];
+        let mut random = thread_rng();
+        let hashmap = ports
+            .iter()
+            .map(|port| match port.host {
+                HostPort::Specified(host) => (host, port.container),
+                HostPort::Generated => {
+                    let mut generated = random.gen_range(1024..u16::MAX);
+                    while generated_ports.contains(&generated) && !self.is_available(generated) {
+                        generated = random.gen_range(1024..u16::MAX);
+                    }
+                    generated_ports.push(generated);
+                    (generated, port.container)
+                }
+            })
+            .collect();
+
+        hashmap
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub async fn spawn(
         &self,
@@ -464,6 +491,8 @@ where
         let entrypoint = container_config.entrypoint.clone();
         let workdir = container_config.workdir.clone();
 
+        let ports = self.create_ports(&container_config.ports);
+
         log::info!(
             "Running container from image `{}/{}`",
             repository,
@@ -481,6 +510,7 @@ where
                 vec![],
                 workdir,
                 None,
+                ports,
                 stdin,
                 stdout,
                 stderr,

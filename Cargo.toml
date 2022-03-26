@@ -31,6 +31,7 @@ which = "4.2.4"
 subst = "0.1.0"
 dotenv = "0.15.0"
 uds = "0.2.6"
+rand = "0.8.5"
 
 [profile.release]
 strip = true

@@ -49,7 +49,7 @@ impl Inner {
             panic!("Message size to large for single buffer"); // TODO allow arbitrary buffer size
         }
 
-        let info: CallInfo = serde_json::from_slice(&data[4..message_size])?;
+        let info: CallInfo = serde_json::from_slice(&data[4..message_size + 4])?;
         log::info!(
             "received call for `{}`, with file descriptors `{}`",
             info.name,
@@ -88,7 +88,7 @@ impl Server {
                     let std_stream = stream
                         .into_std()
                         .context("could not convert Tokio's UnixStream to std's UnixStream")?;
-                    inner.handle(std_stream).await?;
+                    inner.handle(std_stream).await.context("could not handle stream")?;
                 },
                 _ = cancellation_token.cancelled() => break,
                 else => break,

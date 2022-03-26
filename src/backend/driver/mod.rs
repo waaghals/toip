@@ -1,5 +1,6 @@
 mod docker;
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
@@ -47,6 +48,7 @@ pub trait Driver {
         env_files: Vec<PathBuf>,
         workdir: Option<PathBuf>,
         init: Option<bool>,
+        ports: HashMap<u16, u16>,
 
         stdin: Stdio,
         stdout: Stdio,

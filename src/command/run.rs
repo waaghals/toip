@@ -69,7 +69,7 @@ where
             .with_context(|| format!("could not call container `{}`", container_name))
     });
     let server_handle = tokio::spawn(async move {
-        let res = server.listen().await;
+        let res = server.listen().await.context("could not start server");
         res
     });
 
