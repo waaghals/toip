@@ -1,7 +1,3 @@
-aliases:
-  php: php8
-  composer: composer
-  sh: sh
 containers:
   sh:
     build:
@@ -11,7 +7,7 @@ containers:
     volumes:
       /app: source_files
     workdir: /app
-  php8:
+  php:
     build:
       context: .
       target: runtime

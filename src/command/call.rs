@@ -8,14 +8,14 @@ use uds::UnixStreamExt;
 
 use crate::CallInfo;
 
-pub fn call<S, C, A>(socket_path: S, alias: C, args: A) -> Result<()>
+pub fn call<S, C, A>(socket_path: S, container: C, args: A) -> Result<()>
 where
     S: AsRef<Path>,
     C: Into<String>,
     A: IntoIterator<Item = String>,
 {
     let call_info = CallInfo {
-        name: alias.into(),
+        name: container.into(),
         arguments: args.into_iter().collect(),
         envargs: HashMap::new(),
     };

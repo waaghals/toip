@@ -1,6 +1,3 @@
-aliases:
-  rust: rust
-  cargo: cargo
 containers:
   rust:
     build: .

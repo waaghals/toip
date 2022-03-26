@@ -1,5 +1,3 @@
-aliases:
-  sh: sh
 containers:
   sh:
     image: alpine:3

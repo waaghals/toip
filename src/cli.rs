@@ -23,14 +23,14 @@ pub enum Arguments {
 #[derive(Debug, PartialEq, Subcommand)]
 #[clap(infer_subcommands = true)]
 pub enum Command {
-    /// Install the configured aliases
+    /// Install the configured containers
     Install {
         /// Ignore missing configuration file
         #[clap(short, long)]
         ignore_missing: bool,
     },
 
-    /// Add the current configured aliases into the shell
+    /// Add the current configured container into the shell
     Inject {
         // shell injection script to generate
         #[clap(subcommand)]

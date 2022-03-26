@@ -17,9 +17,9 @@ where
     let current_exe = env::current_exe()?;
     fs::create_dir_all(&directory)
         .with_context(|| format!("could not create directory `{}`", directory.display()))?;
-    for (alias, container_name) in config.aliases.iter() {
+    for container_name in config.containers.keys() {
         let mut script_path = directory.clone();
-        script_path.push(&alias);
+        script_path.push(&container_name);
         script::create_run(&script_path, &current_exe, container_name).with_context(|| {
             format!(
                 "could not create run script for directory `{}`",
@@ -76,7 +76,7 @@ pub fn install(ignore_missing_config: bool) -> Result<()> {
     match config_path {
         None => {
             let empty = Path::new("/dev/null");
-            modify_lookup(&empty).context("could not modify alias lookup directory")?;
+            modify_lookup(&empty).context("could not modify container lookup directory")?;
             if ignore_missing_config {
                 Ok(())
             } else {
@@ -133,7 +133,7 @@ pub fn install(ignore_missing_config: bool) -> Result<()> {
                 )
             })?;
 
-            modify_lookup(&script_dir).context("could not modify alias lookup directory")?;
+            modify_lookup(&script_dir).context("could not modify container lookup directory")?;
 
             Ok(())
         }
