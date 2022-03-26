@@ -9,7 +9,7 @@ use tokio::process::Command;
 use which::which;
 
 use crate::backend::{BuildArg, Driver, EnvVar, Image, Mount, Secret, Ssh};
-use crate::config::{HostPort, Port, Reference, RegistrySource};
+use crate::config::{Reference, RegistrySource};
 
 pub struct DockerCliCompatible {
     binary: PathBuf,

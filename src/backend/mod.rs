@@ -1,7 +1,6 @@
 pub mod driver;
 pub mod script;
 
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::net::TcpListener;
@@ -10,7 +9,6 @@ use std::process::Stdio;
 use std::{env, fmt, fs};
 
 use anyhow::{anyhow, bail, Context, Result};
-use rand::rngs::ThreadRng;
 use rand::{thread_rng, Rng};
 
 use crate::backend::driver::Driver;
@@ -415,13 +413,10 @@ where
     }
 
     fn is_available(&self, port: u16) -> bool {
-        match TcpListener::bind(("127.0.0.1", port)) {
-            Ok(_) => true,
-            Err(_) => false,
-        }
+        TcpListener::bind(("127.0.0.1", port)).is_ok()
     }
 
-    fn create_ports(&self, ports: &Vec<Port>) -> HashMap<u16, u16> {
+    fn create_ports(&self, ports: &[Port]) -> HashMap<u16, u16> {
         let mut generated_ports = vec![];
         let mut random = thread_rng();
         let hashmap = ports

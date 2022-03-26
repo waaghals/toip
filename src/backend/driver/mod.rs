@@ -9,7 +9,7 @@ use async_trait::async_trait;
 pub use docker::DockerCliCompatible;
 
 use crate::backend::{BuildArg, EnvVar, Mount, Secret, Ssh};
-use crate::config::{Port, Reference, RegistrySource};
+use crate::config::{Reference, RegistrySource};
 
 #[async_trait]
 pub trait Driver {

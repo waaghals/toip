@@ -12,7 +12,7 @@ use std::{fmt, str};
 
 use anyhow::{anyhow, bail, Context, Result};
 use regex::Regex;
-use serde::de::{EnumAccess, Error, MapAccess, SeqAccess, Unexpected, Visitor};
+use serde::de::{Error, MapAccess, Unexpected, Visitor};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use serde_derive::{Deserialize as DeriveDeserialize, Serialize as DeriveSerialize};
 use sha2::{Digest as Sha2Digest, Sha256};

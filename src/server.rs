@@ -49,7 +49,6 @@ impl Inner {
             panic!("Message size to large for single buffer"); // TODO allow arbitrary buffer size
         }
 
-        log::trace!("{}", String::from_utf8_lossy(&data[4..message_size + 4]));
         let info: CallInfo = serde_json::from_slice(&data[4..message_size + 4])?;
         log::info!(
             "received call for `{}`, with file descriptors `{}`",
