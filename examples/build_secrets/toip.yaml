@@ -1,5 +1,3 @@
-aliases:
-  build_secrets: build_secrets
 containers:
   build_secrets:
     build:

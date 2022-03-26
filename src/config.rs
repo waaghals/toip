@@ -281,7 +281,6 @@ pub struct Config {
     pub containers: HashMap<String, ContainerConfig>,
     #[serde(default)]
     pub volumes: HashMap<String, Volume>,
-    pub aliases: HashMap<String, String>,
 }
 
 #[derive(Debug, DeriveDeserialize)]

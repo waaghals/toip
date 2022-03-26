@@ -1,6 +1,3 @@
-aliases:
-  multiple: multiple
-  simple: simple
 containers:
   multiple:
     image:

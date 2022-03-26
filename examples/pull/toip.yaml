@@ -1,6 +1,3 @@
-aliases:
-  simple: simple
-  full: full
 containers:
   simple:
     image: alpine:3
