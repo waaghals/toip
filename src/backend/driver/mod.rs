@@ -1,5 +1,6 @@
 mod docker;
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
@@ -8,7 +9,7 @@ use async_trait::async_trait;
 pub use docker::DockerCliCompatible;
 
 use crate::backend::{BuildArg, EnvVar, Mount, Secret, Ssh};
-use crate::config::{Reference, RegistrySource};
+use crate::config::{Port, Reference, RegistrySource};
 
 #[async_trait]
 pub trait Driver {
@@ -47,6 +48,7 @@ pub trait Driver {
         env_files: Vec<PathBuf>,
         workdir: Option<PathBuf>,
         init: Option<bool>,
+        ports: HashMap<u16, u16>,
 
         stdin: Stdio,
         stdout: Stdio,

@@ -26,9 +26,12 @@ where
 
     let json =
         serde_json::to_string(&call_info).context("could not serialize call info to json")?;
+    log::trace!("{}", json);
     let payload = json.as_bytes();
+    log::trace!("playload bytes len: `{}`", payload.len());
 
     let size = payload.len() as u32;
+    log::trace!("playload len: `{}`", size);
     let payload_length = size.to_be_bytes();
     let fds = [0, 1, 2];
     log::debug!(
@@ -40,6 +43,7 @@ where
     let mut data = Vec::new();
     data.extend(payload_length);
     data.extend(payload);
+    log::trace!("Frame len: `{}`", data.len());
 
     socket.send_fds(&data, &fds).with_context(|| {
         format!(

@@ -4,6 +4,7 @@ use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::marker::PhantomData;
+use std::num::ParseIntError;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -11,7 +12,7 @@ use std::{fmt, str};
 
 use anyhow::{anyhow, bail, Context, Result};
 use regex::Regex;
-use serde::de::{Error, MapAccess, Unexpected, Visitor};
+use serde::de::{EnumAccess, Error, MapAccess, SeqAccess, Unexpected, Visitor};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use serde_derive::{Deserialize as DeriveDeserialize, Serialize as DeriveSerialize};
 use sha2::{Digest as Sha2Digest, Sha256};
@@ -61,7 +62,7 @@ impl TryFrom<&str> for RegistrySource {
 
         let registry = match captures.name("registry") {
             Some(registry_match) => registry_match.as_str(),
-            None => "registry-1.docker.io",
+            None => "docker.io/library",
         };
         let reference = match captures.name("digest") {
             Some(digest_match) => {
@@ -244,6 +245,11 @@ pub enum Volume {
     #[serde(rename = "bind")]
     Bind(BindVolume),
 }
+#[derive(Debug, Clone, PartialEq, DeriveSerialize)]
+pub struct Port {
+    pub host: HostPort,
+    pub container: u16,
+}
 
 #[derive(Debug, DeriveDeserialize, DeriveSerialize, Clone)]
 pub struct ContainerConfig {
@@ -266,6 +272,8 @@ pub struct ContainerConfig {
     pub env: HashMap<String, EnvString>,
     #[serde(default)]
     pub inherit_envvars: Vec<String>,
+    #[serde(default)]
+    pub ports: Vec<Port>,
 }
 
 #[derive(Debug, DeriveDeserialize, Clone)]
@@ -364,9 +372,54 @@ where
 type EnvPathBuf = EnvSub<PathBuf>;
 type EnvString = EnvSub<String>;
 
+trait FromSubstituted {
+    type Err;
+
+    fn from_substituted(s: &str) -> Result<Self, Self::Err>
+    where
+        Self: Sized;
+}
+
+impl FromSubstituted for String {
+    type Err = Infallible;
+
+    fn from_substituted(s: &str) -> Result<Self, Self::Err> {
+        Ok(String::from(s))
+    }
+}
+
+impl FromSubstituted for PathBuf {
+    type Err = Infallible;
+
+    fn from_substituted(s: &str) -> Result<Self, Self::Err> {
+        Ok(PathBuf::from(s))
+    }
+}
+
+impl FromSubstituted for u16 {
+    type Err = ParseIntError;
+
+    fn from_substituted(s: &str) -> Result<Self, Self::Err> {
+        u16::from_str(s)
+    }
+}
+
+impl FromSubstituted for HostPort {
+    type Err = ParseIntError;
+
+    fn from_substituted(s: &str) -> Result<Self, Self::Err> {
+        if s == "generated" {
+            Ok(HostPort::Generated)
+        } else {
+            let value = u16::from_str(s)?;
+            Ok(HostPort::Specified(value))
+        }
+    }
+}
+
 impl<'de, T> Deserialize<'de> for EnvSub<T>
 where
-    T: Deserialize<'de> + FromStr,
+    T: Deserialize<'de> + FromSubstituted,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -376,7 +429,7 @@ where
 
         impl<'de, T> Visitor<'de> for SubstitutingVisitor<T>
         where
-            T: Deserialize<'de> + FromStr,
+            T: Deserialize<'de> + FromSubstituted,
         {
             type Value = T;
 
@@ -384,14 +437,29 @@ where
                 formatter.write_str("string or anything")
             }
 
+            fn visit_i64<E>(self, v: i64) -> std::result::Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                self.visit_str(v.to_string().as_str())
+            }
+
+            fn visit_u64<E>(self, v: u64) -> std::result::Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                self.visit_str(v.to_string().as_str())
+            }
+
             fn visit_str<E>(self, value: &str) -> Result<T, E>
             where
                 E: de::Error,
             {
+                // TODO might call deserialize_any here as well from substituted?
                 let substituted = subst::substitute(value, &subst::Env)
                     .map_err(|err| de::Error::custom(format!("{}", err)))?;
 
-                T::from_str(substituted.as_str())
+                T::from_substituted(substituted.as_str())
                     .map_err(|_| de::Error::custom(format!("Failed to parse `{}`", substituted)))
             }
 
@@ -412,6 +480,122 @@ where
 
         let value = deserializer.deserialize_any(SubstitutingVisitor(PhantomData))?;
         Ok(EnvSub { substituted: value })
+    }
+}
+
+#[derive(DeriveSerialize, PartialEq, Clone, Debug)]
+pub enum HostPort {
+    Specified(u16),
+    Generated,
+}
+
+impl<'de> Deserialize<'de> for HostPort {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct HostPortVisitor;
+
+        impl<'de> Visitor<'de> for HostPortVisitor {
+            type Value = HostPort;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("option")
+            }
+
+            fn visit_unit<E>(self) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                Ok(HostPort::Generated)
+            }
+
+            fn visit_none<E>(self) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                Ok(HostPort::Generated)
+            }
+
+            fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                let substituted = EnvSub::<HostPort>::deserialize(deserializer)?;
+                Ok(substituted.into_inner())
+            }
+        }
+
+        deserializer.deserialize_option(HostPortVisitor)
+    }
+}
+
+#[derive(DeriveDeserialize)]
+#[serde(field_identifier, rename_all = "lowercase")]
+enum PortField {
+    Host,
+    Container,
+}
+
+impl<'de> Deserialize<'de> for Port {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct PortVisitor;
+
+        impl<'de> Visitor<'de> for PortVisitor {
+            type Value = Port;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("port struct")
+            }
+
+            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+            where
+                A: MapAccess<'de>,
+            {
+                let mut host_value: Option<HostPort> = None;
+                let mut container_value: Option<u16> = None;
+                while let Some(key) = map.next_key()? {
+                    match key {
+                        PortField::Host => {
+                            if host_value.is_some() {
+                                return Err(de::Error::duplicate_field("host"));
+                            }
+                            host_value = Some(map.next_value()?);
+                        }
+                        PortField::Container => {
+                            if container_value.is_some() {
+                                return Err(de::Error::duplicate_field("container"));
+                            }
+                            container_value = Some(map.next_value()?);
+                        }
+                    }
+                }
+
+                match (host_value, container_value) {
+                    (None, None) => Err(de::Error::missing_field("host")),
+                    (None, Some(container)) => Ok(Port {
+                        host: HostPort::Generated,
+                        container,
+                    }),
+                    (Some(host), None) => match host {
+                        HostPort::Specified(port) => Ok(Port {
+                            host,
+                            container: port,
+                        }),
+                        HostPort::Generated => Err(de::Error::custom(
+                            "generated host port requires container port to be specified",
+                        )),
+                    },
+                    (Some(host), Some(container)) => Ok(Port { host, container }),
+                }
+            }
+        }
+
+        let value = deserializer.deserialize_any(PortVisitor)?;
+        Ok(value)
     }
 }
 

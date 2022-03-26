@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
@@ -8,7 +9,7 @@ use tokio::process::Command;
 use which::which;
 
 use crate::backend::{BuildArg, Driver, EnvVar, Image, Mount, Secret, Ssh};
-use crate::config::{Reference, RegistrySource};
+use crate::config::{HostPort, Port, Reference, RegistrySource};
 
 pub struct DockerCliCompatible {
     binary: PathBuf,
@@ -98,25 +99,27 @@ impl Driver for DockerCliCompatible {
     }
 
     async fn pull(&self, image: &RegistrySource) -> Result<()> {
-        let mut pull_command = Command::new(&self.binary);
+        let mut command = Command::new(&self.binary);
         if let Some(argument) = &self.argument {
-            pull_command.arg(argument);
+            command.arg(argument);
         }
-        pull_command.env_clear();
-        pull_command.arg("pull");
-        pull_command.arg(format!("{}", image));
+        command.arg("pull");
+        command.arg(format!("{}", image));
 
-        pull_command.stdin(Stdio::null());
-        pull_command.stdout(Stdio::null());
-        pull_command.stderr(Stdio::null());
+        command.stdin(Stdio::null());
+        command.stdout(Stdio::null());
+        command.stderr(Stdio::null());
 
-        let status = pull_command
-            .status()
+        log::trace!("{:#?}", command);
+
+        let output = command
+            .output()
             .await
             .context("could not run pull command")?;
 
-        if !status.success() {
-            bail!("pull command failed");
+        if !output.status.success() {
+            println!("{}", String::from_utf8_lossy(&output.stderr));
+            bail!("prepare command failed");
         }
 
         Ok(())
@@ -138,7 +141,6 @@ impl Driver for DockerCliCompatible {
         F: AsRef<Path> + Send,
     {
         let mut command = Command::new(&self.binary);
-        command.env_clear();
         command.env("DOCKER_BUILDKIT", "1");
         if let Some(argument) = &self.argument {
             command.arg(argument);
@@ -183,6 +185,8 @@ impl Driver for DockerCliCompatible {
         command.stdin(Stdio::null());
         command.stderr(Stdio::null());
 
+        log::trace!("{:#?}", command);
+
         let output = command
             .output()
             .await
@@ -208,13 +212,12 @@ impl Driver for DockerCliCompatible {
         env_files: Vec<PathBuf>,
         workdir: Option<PathBuf>,
         init: Option<bool>,
+        ports: HashMap<u16, u16>,
         stdin: Stdio,
         stdout: Stdio,
         stderr: Stdio,
     ) -> Result<()> {
         let mut command = Command::new(&self.binary);
-        command.env_clear();
-
         command.arg("run");
         command.arg("--rm");
         command.arg("-it");
@@ -270,6 +273,11 @@ impl Driver for DockerCliCompatible {
             if init {
                 command.arg("--init");
             }
+        }
+
+        for (host, container) in ports {
+            command.arg("-p");
+            command.arg(format!("{}:{}", host, container));
         }
 
         match reference {
